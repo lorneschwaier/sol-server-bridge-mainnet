@@ -94,6 +94,8 @@ async function createNFT(walletAddress, metadata, uri) {
   const mint = generateSigner(umi);
   const owner = publicKey(walletAddress);
 
+  const collectionKey = process.env.COLLECTION_MINT_ADDRESS ? publicKey(process.env.COLLECTION_MINT_ADDRESS) : null;
+
   const tx = await createNft(umi, {
     mint,
     name: metadata.name || "Unnamed",
@@ -108,6 +110,7 @@ async function createNFT(walletAddress, metadata, uri) {
       },
     ],
     tokenOwner: owner,
+    collection: collectionKey ? { key: collectionKey, verified: true } : undefined,
     isMutable: true,
   }).sendAndConfirm(umi);
 
