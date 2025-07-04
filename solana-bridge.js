@@ -154,6 +154,26 @@ app.get("/health", async (_, res) => {
   });
 });
 
+app.post("/blockhash", async (req, res) => {
+  try {
+    const response = await connection.getLatestBlockhash("finalized");
+    res.json({
+      jsonrpc: "2.0",
+      result: {
+        value: {
+          blockhash: response.blockhash,
+          lastValidBlockHeight: response.lastValidBlockHeight,
+        }
+      },
+      id: req.body.id || 1
+    });
+  } catch (error) {
+    console.error("Blockhash fetch failed:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
