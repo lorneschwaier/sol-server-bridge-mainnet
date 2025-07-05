@@ -136,7 +136,21 @@ app.post("/mint-nft", async (req, res) => {
       : metadata.image;
     console.log("🖼️ Final image URL:", imageUrl);
 
-    const fullMetadata = { ...metadata, image: imageUrl };
+    const fullMetadata = {
+  name: metadata.name || "Unnamed",
+  symbol: metadata.symbol || "NFT",
+  image: imageUrl,
+  seller_fee_basis_points: (metadata.royalty || 0) * 100,
+  properties: {
+    creators: [
+      {
+        address: umi.identity.publicKey.toString(),
+        share: 100,
+      },
+    ],
+  },
+};
+
     const uri = await uploadMetadataToPinata(fullMetadata);
     console.log("📄 Metadata URI:", uri);
 
