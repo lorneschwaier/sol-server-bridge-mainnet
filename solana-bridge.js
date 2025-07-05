@@ -1,65 +1,73 @@
-const express = require("express");
-const cors = require("cors");
-const { Connection, PublicKey, Keypair, Transaction, SystemProgram, clusterApiUrl, LAMPORTS_PER_SOL } = require("@solana/web3.js");
-const { createUmi } = require("@metaplex-foundation/umi-bundle-defaults");
-const { createNft, mplTokenMetadata } = require("@metaplex-foundation/mpl-token-metadata");
-const { createSignerFromKeypair, signerIdentity, generateSigner, publicKey } = require("@metaplex-foundation/umi");
-const axios = require("axios");
-const bs58 = require("bs58");
-const FormData = require("form-data");
+const express = require("express")
+const cors = require("cors")
+const {
+  Connection,
+  PublicKey,
+  Keypair,
+  Transaction,
+  SystemProgram,
+  clusterApiUrl,
+  LAMPORTS_PER_SOL,
+} = require("@solana/web3.js")
+const { createUmi } = require("@metaplex-foundation/umi-bundle-defaults")
+const { createNft, mplTokenMetadata } = require("@metaplex-foundation/mpl-token-metadata")
+const { createSignerFromKeypair, signerIdentity, generateSigner, publicKey } = require("@metaplex-foundation/umi")
+const axios = require("axios")
+const bs58 = require("bs58")
+const FormData = require("form-data")
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+const app = express()
+const PORT = process.env.PORT || 3000
 
-app.use(cors());
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(cors())
+app.use(express.json({ limit: "50mb" }))
+app.use(express.urlencoded({ extended: true, limit: "50mb" }))
 
-const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "devnet";
-const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || clusterApiUrl(SOLANA_NETWORK);
-const PINATA_API_KEY = process.env.PINATA_API_KEY;
-const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY;
-const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY;
+const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "devnet"
+const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || clusterApiUrl(SOLANA_NETWORK)
+const PINATA_API_KEY = process.env.PINATA_API_KEY
+const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
+const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
 
-const connection = new Connection(SOLANA_RPC_URL, "confirmed");
-let creatorKeypair = null;
-let umi = null;
+const connection = new Connection(SOLANA_RPC_URL, "confirmed")
+let creatorKeypair = null
+let umi = null
 
 function initUmi() {
-  if (!CREATOR_PRIVATE_KEY) return;
+  if (!CREATOR_PRIVATE_KEY) return
 
   try {
     const privateKeyArray = CREATOR_PRIVATE_KEY.startsWith("[")
       ? JSON.parse(CREATOR_PRIVATE_KEY)
-      : Array.from(bs58.decode(CREATOR_PRIVATE_KEY));
+      : Array.from(bs58.decode(CREATOR_PRIVATE_KEY))
 
-    creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
-    umi = createUmi(SOLANA_RPC_URL);
-    const umiKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(privateKeyArray));
-    const signer = createSignerFromKeypair(umi, umiKeypair);
+    creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
+    umi = createUmi(SOLANA_RPC_URL)
+    const umiKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(privateKeyArray))
+    const signer = createSignerFromKeypair(umi, umiKeypair)
 
-    umi.use(signerIdentity(signer));
-    umi.use(mplTokenMetadata());
-    console.log("✅ UMI ready for minting");
+    umi.use(signerIdentity(signer))
+    umi.use(mplTokenMetadata())
+    console.log("✅ UMI ready for minting")
   } catch (e) {
-    console.error("UMI init failed:", e.message);
+    console.error("UMI init failed:", e.message)
   }
 }
 
-initUmi();
+initUmi()
 
 async function uploadImageToPinata(imageUrl) {
-  const imageResponse = await axios.get(imageUrl, { responseType: "stream" });
-  const ext = imageUrl.split(".").pop().split("?")[0];
-  const fileName = `nft-image-${Date.now()}.${ext}`;
+  const imageResponse = await axios.get(imageUrl, { responseType: "stream" })
+  const ext = imageUrl.split(".").pop().split("?")[0]
+  const fileName = `nft-image-${Date.now()}.${ext}`
 
-  const form = new FormData();
+  const form = new FormData()
   form.append("file", imageResponse.data, {
     filename: fileName,
     contentType: imageResponse.headers["content-type"] || "image/png",
-  });
+  })
 
-  form.append("pinataMetadata", JSON.stringify({ name: fileName }));
+  form.append("pinataMetadata", JSON.stringify({ name: fileName }))
 
   const res = await axios.post("https://api.pinata.cloud/pinning/pinFileToIPFS", form, {
     headers: {
@@ -67,9 +75,9 @@ async function uploadImageToPinata(imageUrl) {
       pinata_api_key: PINATA_API_KEY,
       pinata_secret_api_key: PINATA_SECRET_KEY,
     },
-  });
+  })
 
-  return `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`;
+  return `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`
 }
 
 async function uploadMetadataToPinata(metadata) {
@@ -84,17 +92,17 @@ async function uploadMetadataToPinata(metadata) {
         pinata_api_key: PINATA_API_KEY,
         pinata_secret_api_key: PINATA_SECRET_KEY,
       },
-    }
-  );
+    },
+  )
 
-  return `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`;
+  return `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`
 }
 
 async function createNFT(walletAddress, metadata, uri) {
-  const mint = generateSigner(umi);
-  const owner = publicKey(walletAddress);
+  const mint = generateSigner(umi)
+  const owner = publicKey(walletAddress)
 
-  const collectionKey = process.env.COLLECTION_MINT_ADDRESS ? publicKey(process.env.COLLECTION_MINT_ADDRESS) : null;
+  const collectionKey = process.env.COLLECTION_MINT_ADDRESS ? publicKey(process.env.COLLECTION_MINT_ADDRESS) : null
 
   const tx = await createNft(umi, {
     mint,
@@ -112,26 +120,24 @@ async function createNFT(walletAddress, metadata, uri) {
     tokenOwner: owner,
     collection: collectionKey ? { key: collectionKey, verified: true } : undefined,
     isMutable: true,
-  }).sendAndConfirm(umi);
+  }).sendAndConfirm(umi)
 
   return {
     mint: mint.publicKey,
     signature: tx.signature,
     explorer: `https://explorer.solana.com/address/${mint.publicKey}${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`,
-  };
+  }
 }
 
 // ✅ MINT-NFT ROUTE
 app.post("/mint-nft", async (req, res) => {
-  console.log("🔥 /mint-nft route hit");
+  console.log("🔥 /mint-nft route hit")
 
   try {
-    const { walletAddress, metadata } = req.body;
-    if (!walletAddress || !metadata) throw new Error("Missing walletAddress or metadata");
+    const { walletAddress, metadata } = req.body
+    if (!walletAddress || !metadata) throw new Error("Missing walletAddress or metadata")
 
-    const imageUrl = metadata.image.startsWith("http")
-      ? await uploadImageToPinata(metadata.image)
-      : metadata.image;
+    const imageUrl = metadata.image.startsWith("http") ? await uploadImageToPinata(metadata.image) : metadata.image
 
     const fullMetadata = {
       name: metadata.name || "Unnamed",
@@ -146,10 +152,10 @@ app.post("/mint-nft", async (req, res) => {
           },
         ],
       },
-    };
+    }
 
-    const uri = await uploadMetadataToPinata(fullMetadata);
-    const nft = await createNFT(walletAddress, fullMetadata, uri);
+    const uri = await uploadMetadataToPinata(fullMetadata)
+    const nft = await createNFT(walletAddress, fullMetadata, uri)
 
     res.json({
       success: true,
@@ -157,52 +163,52 @@ app.post("/mint-nft", async (req, res) => {
       signature: nft.signature,
       explorer: nft.explorer,
       uri,
-    });
+    })
   } catch (e) {
-    console.error("❌ Minting failed:", e);
-    res.status(500).json({ success: false, error: e.message });
+    console.error("❌ Minting failed:", e)
+    res.status(500).json({ success: false, error: e.message })
   }
-});
+})
 
 // ✅ SEND-TX ROUTE
 app.post("/send-tx", async (req, res) => {
   try {
-    const { walletAddress, amount } = req.body;
+    const { walletAddress, amount } = req.body
     if (!walletAddress || !amount) {
-      return res.status(400).json({ success: false, error: "Missing walletAddress or amount" });
+      return res.status(400).json({ success: false, error: "Missing walletAddress or amount" })
     }
 
-    const payer = new PublicKey(walletAddress);
-    const receiver = creatorKeypair.publicKey;
+    const payer = new PublicKey(walletAddress)
+    const receiver = creatorKeypair.publicKey
 
-    const blockhashInfo = await connection.getLatestBlockhash("finalized");
+    const blockhashInfo = await connection.getLatestBlockhash("finalized")
 
     const transaction = new Transaction({
       recentBlockhash: blockhashInfo.blockhash,
       feePayer: payer,
-    });
+    })
 
     transaction.add(
       SystemProgram.transfer({
         fromPubkey: payer,
         toPubkey: receiver,
-        lamports: Math.floor(parseFloat(amount) * LAMPORTS_PER_SOL),
-      })
-    );
+        lamports: Math.floor(Number.parseFloat(amount) * LAMPORTS_PER_SOL),
+      }),
+    )
 
     const serializedTransaction = transaction.serialize({
       requireAllSignatures: false,
       verifySignatures: false,
-    });
+    })
 
-    const base64Tx = serializedTransaction.toString("base64");
+    const base64Tx = serializedTransaction.toString("base64")
 
-    res.json({ success: true, transaction: base64Tx });
+    res.json({ success: true, transaction: base64Tx })
   } catch (err) {
-    console.error("❌ /send-tx error:", err);
-    res.status(500).json({ success: false, error: err.message });
+    console.error("❌ /send-tx error:", err)
+    res.status(500).json({ success: false, error: err.message })
   }
-});
+})
 
 // ✅ HEALTHCHECK
 app.get("/health", async (_, res) => {
@@ -212,13 +218,13 @@ app.get("/health", async (_, res) => {
     pinata: !!PINATA_API_KEY && !!PINATA_SECRET_KEY,
     umiReady: !!umi,
     network: SOLANA_NETWORK,
-  });
-});
+  })
+})
 
 // ✅ BLOCKHASH (OPTIONAL)
 app.post("/blockhash", async (req, res) => {
   try {
-    const response = await connection.getLatestBlockhash("finalized");
+    const response = await connection.getLatestBlockhash("finalized")
     res.json({
       jsonrpc: "2.0",
       result: {
@@ -228,11 +234,11 @@ app.post("/blockhash", async (req, res) => {
         },
       },
       id: req.body.id || 1,
-    });
+    })
   } catch (error) {
-    console.error("Blockhash fetch failed:", error);
-    res.status(500).json({ error: error.message });
+    console.error("Blockhash fetch failed:", error)
+    res.status(500).json({ error: error.message })
   }
-});
+})
 
-module.exports = app;
+module.exports = app
