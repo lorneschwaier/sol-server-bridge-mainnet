@@ -123,14 +123,25 @@ async function createNFT(walletAddress, metadata, uri) {
 }
 
 app.post("/mint-nft", async (req, res) => {
+  console.log("🔥 /mint-nft route hit"); // This confirms the route is being hit
+
   try {
     const { walletAddress, metadata } = req.body;
+    console.log("📦 Received body:", req.body);
+
     if (!walletAddress || !metadata) throw new Error("Missing walletAddress or metadata");
 
-    const imageUrl = metadata.image.startsWith("http") ? await uploadImageToPinata(metadata.image) : metadata.image;
+    const imageUrl = metadata.image.startsWith("http")
+      ? await uploadImageToPinata(metadata.image)
+      : metadata.image;
+    console.log("🖼️ Final image URL:", imageUrl);
+
     const fullMetadata = { ...metadata, image: imageUrl };
     const uri = await uploadMetadataToPinata(fullMetadata);
+    console.log("📄 Metadata URI:", uri);
+
     const nft = await createNFT(walletAddress, fullMetadata, uri);
+    console.log("✅ NFT Minted:", nft);
 
     res.json({
       success: true,
@@ -140,9 +151,11 @@ app.post("/mint-nft", async (req, res) => {
       uri,
     });
   } catch (e) {
+    console.error("❌ Minting failed:", e);
     res.status(500).json({ success: false, error: e.message });
   }
 });
+
 
 app.get("/health", async (_, res) => {
   res.json({
