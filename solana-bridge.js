@@ -125,7 +125,7 @@ async function createNFT(walletAddress, metadata, uri) {
   return {
     mint: mint.publicKey,
     signature: tx.signature,
-    explorer: `https://explorer.solana.com/address/${mint.publicKey}${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`,
+    explorer: `https://explorer.solana.com/address/${mint.publicKey}${SOLANA_NETWORK.includes("mainnet") ? "" : "?cluster=devnet"}`,
   }
 }
 
