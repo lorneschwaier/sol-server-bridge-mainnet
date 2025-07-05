@@ -7,25 +7,29 @@
     }
   ],
   "routes": [
-  {
-    "src": "/mint-nft",
-    "methods": ["POST"],
-    "dest": "/solana-bridge.js"
-  },
-  {
-    "src": "/blockhash",
-    "methods": ["POST"],
-    "dest": "/solana-bridge.js"
-  },
-  {
-    "src": "/health",
-    "methods": ["GET"],
-    "dest": "/solana-bridge.js"
-  },
-  {
-    "src": "/.*",
-    "dest": "/solana-bridge.js"
-  }
-]
+    {
+      "src": "/mint-nft",
+      "methods": ["POST"],
+      "dest": "/solana-bridge.js"
+    },
+    {
+      "src": "/blockhash",
+      "methods": ["POST"],
+      "dest": "/solana-bridge.js"
+    },
+    {
+      "src": "/send-tx",
+      "methods": ["POST"],
+      "dest": "/solana-bridge.js"
+    },
+    {
+      "src": "/health",
+      "methods": ["GET"],
+      "dest": "/solana-bridge.js"
+    },
+    {
+      "src": "/.*",
+      "dest": "/solana-bridge.js"
+    }
+  ]
 }
-
