@@ -23,7 +23,7 @@ app.use(cors())
 app.use(express.json({ limit: "50mb" }))
 app.use(express.urlencoded({ extended: true, limit: "50mb" }))
 
-const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "devnet"
+const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || clusterApiUrl(SOLANA_NETWORK)
 const PINATA_API_KEY = process.env.PINATA_API_KEY
 const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
