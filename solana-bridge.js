@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } = require("@solana/web3.js");
+const { Connection, PublicKey, Keypair, Transaction, SystemProgram, clusterApiUrl, LAMPORTS_PER_SOL } = require("@solana/web3.js");
 const { createUmi } = require("@metaplex-foundation/umi-bundle-defaults");
 const { createNft, mplTokenMetadata } = require("@metaplex-foundation/mpl-token-metadata");
 const { createSignerFromKeypair, signerIdentity, generateSigner, publicKey } = require("@metaplex-foundation/umi");
@@ -117,45 +117,39 @@ async function createNFT(walletAddress, metadata, uri) {
   return {
     mint: mint.publicKey,
     signature: tx.signature,
-    explorer: `https://explorer.solana.com/address/${mint.publicKey}$
-      {SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`,
+    explorer: `https://explorer.solana.com/address/${mint.publicKey}${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`,
   };
 }
 
+// ✅ MINT-NFT ROUTE
 app.post("/mint-nft", async (req, res) => {
-  console.log("🔥 /mint-nft route hit"); // This confirms the route is being hit
+  console.log("🔥 /mint-nft route hit");
 
   try {
     const { walletAddress, metadata } = req.body;
-    console.log("📦 Received body:", req.body);
-
     if (!walletAddress || !metadata) throw new Error("Missing walletAddress or metadata");
 
     const imageUrl = metadata.image.startsWith("http")
       ? await uploadImageToPinata(metadata.image)
       : metadata.image;
-    console.log("🖼️ Final image URL:", imageUrl);
 
     const fullMetadata = {
-  name: metadata.name || "Unnamed",
-  symbol: metadata.symbol || "NFT",
-  image: imageUrl,
-  seller_fee_basis_points: (metadata.royalty || 0) * 100,
-  properties: {
-    creators: [
-      {
-        address: umi.identity.publicKey.toString(),
-        share: 100,
+      name: metadata.name || "Unnamed",
+      symbol: metadata.symbol || "NFT",
+      image: imageUrl,
+      seller_fee_basis_points: (metadata.royalty || 0) * 100,
+      properties: {
+        creators: [
+          {
+            address: umi.identity.publicKey.toString(),
+            share: 100,
+          },
+        ],
       },
-    ],
-  },
-};
+    };
 
     const uri = await uploadMetadataToPinata(fullMetadata);
-    console.log("📄 Metadata URI:", uri);
-
     const nft = await createNFT(walletAddress, fullMetadata, uri);
-    console.log("✅ NFT Minted:", nft);
 
     res.json({
       success: true,
@@ -170,7 +164,47 @@ app.post("/mint-nft", async (req, res) => {
   }
 });
 
+// ✅ SEND-TX ROUTE
+app.post("/send-tx", async (req, res) => {
+  try {
+    const { walletAddress, amount } = req.body;
+    if (!walletAddress || !amount) {
+      return res.status(400).json({ success: false, error: "Missing walletAddress or amount" });
+    }
 
+    const payer = new PublicKey(walletAddress);
+    const receiver = creatorKeypair.publicKey;
+
+    const blockhashInfo = await connection.getLatestBlockhash("finalized");
+
+    const transaction = new Transaction({
+      recentBlockhash: blockhashInfo.blockhash,
+      feePayer: payer,
+    });
+
+    transaction.add(
+      SystemProgram.transfer({
+        fromPubkey: payer,
+        toPubkey: receiver,
+        lamports: Math.floor(parseFloat(amount) * LAMPORTS_PER_SOL),
+      })
+    );
+
+    const serializedTransaction = transaction.serialize({
+      requireAllSignatures: false,
+      verifySignatures: false,
+    });
+
+    const base64Tx = serializedTransaction.toString("base64");
+
+    res.json({ success: true, transaction: base64Tx });
+  } catch (err) {
+    console.error("❌ /send-tx error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ✅ HEALTHCHECK
 app.get("/health", async (_, res) => {
   res.json({
     status: "ok",
@@ -181,6 +215,7 @@ app.get("/health", async (_, res) => {
   });
 });
 
+// ✅ BLOCKHASH (OPTIONAL)
 app.post("/blockhash", async (req, res) => {
   try {
     const response = await connection.getLatestBlockhash("finalized");
@@ -190,15 +225,14 @@ app.post("/blockhash", async (req, res) => {
         value: {
           blockhash: response.blockhash,
           lastValidBlockHeight: response.lastValidBlockHeight,
-        }
+        },
       },
-      id: req.body.id || 1
+      id: req.body.id || 1,
     });
   } catch (error) {
     console.error("Blockhash fetch failed:", error);
     res.status(500).json({ error: error.message });
   }
 });
-
 
 module.exports = app;
