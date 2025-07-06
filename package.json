@@ -1,14 +1,22 @@
 {
-  "name": "sol-server-bridge-mainnet",
-  "version": "2.0.0",
-  "description": "Solana NFT Bridge Server",
+  "name": "solana-nft-bridge",
+  "version": "5.0.0",
+  "description": "Solana NFT Bridge with MODERN Metaplex UMI",
   "main": "solana-bridge.js",
-  "type": "module",
   "scripts": {
-    "dev": "vercel dev"
+    "start": "node solana-bridge.js",
+    "dev": "nodemon solana-bridge.js"
   },
   "dependencies": {
-    "@solana/web3.js": "^1.87.6"
+    "@metaplex-foundation/umi": "^0.9.2",
+    "@metaplex-foundation/umi-bundle-defaults": "^0.9.2",
+    "@metaplex-foundation/mpl-token-metadata": "^3.2.1",
+    "@solana/web3.js": "^1.95.2",
+    "@solana/spl-token": "^0.4.8",
+    "axios": "^1.7.2",
+    "bs58": "^5.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
   },
   "engines": {
     "node": "18.x"
