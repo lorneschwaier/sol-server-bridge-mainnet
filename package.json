@@ -1,24 +1,31 @@
 {
-  "name": "solana-nft-bridge",
-  "version": "5.0.0",
-  "description": "Solana NFT Bridge with MODERN Metaplex UMI",
+  "name": "solana-bridge-server",
+  "version": "1.0.0",
+  "description": "Solana NFT Bridge Server for WordPress Plugin",
   "main": "solana-bridge.js",
   "scripts": {
     "start": "node solana-bridge.js",
     "dev": "nodemon solana-bridge.js"
   },
   "dependencies": {
-    "@metaplex-foundation/umi": "^0.9.2",
-    "@metaplex-foundation/umi-bundle-defaults": "^0.9.2",
-    "@metaplex-foundation/mpl-token-metadata": "^3.2.1",
-    "@solana/web3.js": "^1.95.2",
-    "@solana/spl-token": "^0.4.8",
-    "axios": "^1.7.2",
+    "@metaplex-foundation/js": "^0.19.4",
+    "@metaplex-foundation/mpl-token-metadata": "^2.13.0",
+    "@metaplex-foundation/umi": "^0.8.2",
+    "@metaplex-foundation/umi-bundle-defaults": "^0.8.2",
+    "@solana/web3.js": "^1.87.6",
+    "axios": "^1.6.0",
     "bs58": "^5.0.0",
     "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "express": "^4.18.2",
+    "form-data": "^4.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   },
   "engines": {
-    "node": "18.x"
-  }
+    "node": ">=18.0.0"
+  },
+  "keywords": ["solana", "nft", "bridge", "wordpress", "metaplex"],
+  "author": "Your Name",
+  "license": "MIT"
 }
