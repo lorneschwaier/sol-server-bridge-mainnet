@@ -210,19 +210,23 @@ app.get("/health", async (_, res) => {
   })
 })
 
-// ✅ BLOCKHASH ROUTE
+// ✅ BLOCKHASH ROUTE - FIXED FORMAT
 app.post("/blockhash", async (req, res) => {
   try {
     console.log("🔗 Blockhash request received")
     const response = await connection.getLatestBlockhash("finalized")
 
+    // Return in the format the frontend expects
     const result = {
-      blockhash: response.blockhash,
-      lastValidBlockHeight: response.lastValidBlockHeight,
+      result: {
+        value: {
+          blockhash: response.blockhash,
+          lastValidBlockHeight: response.lastValidBlockHeight,
+        },
+      },
     }
 
     console.log("✅ Blockhash response:", result)
-
     res.json(result)
   } catch (error) {
     console.error("❌ Blockhash fetch failed:", error)
