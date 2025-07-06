@@ -4,7 +4,8 @@ import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
 import { createNft, mplTokenMetadata } from "@metaplex-foundation/mpl-token-metadata"
 import { createSignerFromKeypair, signerIdentity, generateSigner } from "@metaplex-foundation/umi"
 
-const connection = new Connection("https://solana-mainnet.g.alchemy.com/v2/demo", "confirmed")
+// Use Helius free endpoint - more reliable than Alchemy
+const connection = new Connection("https://mainnet.helius-rpc.com/?api-key=demo", "confirmed")
 
 export default async function handler(req, res) {
   // Enable CORS
@@ -188,8 +189,8 @@ export default async function handler(req, res) {
         throw new Error(`Insufficient balance for NFT creation: ${merchantSOL.toFixed(4)} SOL. Need at least 0.01 SOL.`)
       }
 
-      // Create UMI instance for REAL mainnet
-      const umi = createUmi("https://api.mainnet-beta.solana.com")
+      // Create UMI instance for REAL mainnet with same reliable endpoint
+      const umi = createUmi("https://mainnet.helius-rpc.com/?api-key=demo")
       umi.use(mplTokenMetadata())
 
       // Convert Keypair to UMI format
