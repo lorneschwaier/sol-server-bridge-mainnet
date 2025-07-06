@@ -5,7 +5,7 @@ import { createNft, mplTokenMetadata } from "@metaplex-foundation/mpl-token-meta
 import { createSignerFromKeypair, signerIdentity, generateSigner } from "@metaplex-foundation/umi"
 
 // Use completely free, no-auth RPC endpoint
-const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed")
+const connection = new Connection(process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com", "confirmed")
 
 export default async function handler(req, res) {
   // Enable CORS
@@ -190,7 +190,7 @@ export default async function handler(req, res) {
       }
 
       // Create UMI instance for REAL mainnet with free endpoint
-      const umi = createUmi("https://api.mainnet-beta.solana.com")
+      const umi = createUmi("https://rpc.helius.xyz/?api-key=4ca9c99a-951f-442f-b17f-925398524194")
       umi.use(mplTokenMetadata())
 
       // Convert Keypair to UMI format
