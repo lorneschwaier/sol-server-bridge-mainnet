@@ -4,7 +4,7 @@ import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
 import { createNft, mplTokenMetadata } from "@metaplex-foundation/mpl-token-metadata"
 import { createSignerFromKeypair, signerIdentity, generateSigner } from "@metaplex-foundation/umi"
 
-const connection = new Connection(process.env.RPC_URL || "https://api.mainnet-beta.solana.com", "confirmed")
+const connection = new Connection("https://solana-mainnet.g.alchemy.com/v2/demo", "confirmed")
 
 export default async function handler(req, res) {
   // Enable CORS
