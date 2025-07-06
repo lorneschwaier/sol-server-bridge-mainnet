@@ -3,6 +3,7 @@
   "version": "5.0.0",
   "description": "Solana NFT Bridge with MODERN Metaplex UMI",
   "main": "solana-bridge.js",
+  "type": "module",
   "scripts": {
     "start": "node solana-bridge.js",
     "dev": "nodemon solana-bridge.js"
@@ -11,6 +12,7 @@
     "@metaplex-foundation/umi": "^0.9.2",
     "@metaplex-foundation/umi-bundle-defaults": "^0.9.2",
     "@metaplex-foundation/mpl-token-metadata": "^3.2.1",
+    "@metaplex-foundation/umi-uploader-bundlr": "^0.9.2",
     "@solana/web3.js": "^1.95.2",
     "@solana/spl-token": "^0.4.8",
     "axios": "^1.7.2",
