@@ -73,14 +73,15 @@ export default async function handler(req, res) {
 
       // --- 2. UPLOAD METADATA TO ARWEAVE (MAINNET) ---
       console.log("📤 2. Uploading metadata to Arweave via MAINNET Bundlr...")
-      const imageUri = await umi.uploader.upload([await fetch(metadata.image).then((res) => res.blob())])
-      console.log(`    - ✅ Image uploaded to Arweave: ${imageUri}`)
+      const imageBlob = await fetch(metadata.image).then((res) => res.blob())
+      const imageUri = await umi.uploader.upload([imageBlob])
+      console.log(`    - ✅ Image uploaded to Arweave: ${imageUri[0]}`)
 
       const metadataWithImage = {
         ...metadata,
         image: imageUri[0],
         properties: {
-          files: [{ type: "image/png", uri: imageUri[0] }],
+          files: [{ type: imageBlob.type, uri: imageUri[0] }],
         },
       }
 
