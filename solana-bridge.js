@@ -150,6 +150,18 @@ app.get("/health", async (_, res) => {
     network: SOLANA_NETWORK,
   });
 });
+app.post("/blockhash", async (req, res) => {
+  try {
+    const latestBlockhash = await connection.getLatestBlockhash("finalized");
+    res.json({
+      blockhash: latestBlockhash.blockhash,
+      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+    });
+  } catch (e) {
+    console.error("❌ Failed to fetch blockhash:", e.message);
+    res.status(500).json({ error: "Failed to fetch blockhash" });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
