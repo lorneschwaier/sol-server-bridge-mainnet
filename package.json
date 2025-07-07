@@ -2,7 +2,7 @@
   "name": "sol-server-bridge-mainnet",
   "version": "2.0.0",
   "description": "Real Solana NFT Bridge Server for Mainnet",
-  "main": "index.js",
+  "main": "solana-bridge.js",
   "scripts": {
     "dev": "vercel dev",
     "build": "echo 'No build step required'",
