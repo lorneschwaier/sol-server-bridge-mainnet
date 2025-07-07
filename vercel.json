@@ -6,25 +6,25 @@
       "use": "@vercel/node"
     }
   ],
+  "functions": {
+    "api/*.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
   "routes": [
     {
-      "src": "/mint-nft",
-      "methods": ["POST"],
-      "dest": "/solana-bridge.js"
-    },
-    {
-      "src": "/blockhash",
-      "methods": ["POST"],
+      "src": "/health",
+      "methods": ["GET"],
       "dest": "/solana-bridge.js"
     },
     {
       "src": "/send-tx",
-      "methods": ["POST"],
+      "methods": ["POST", "OPTIONS"],
       "dest": "/solana-bridge.js"
     },
     {
-      "src": "/health",
-      "methods": ["GET"],
+      "src": "/mint-nft",
+      "methods": ["POST", "OPTIONS"],
       "dest": "/solana-bridge.js"
     },
     {
