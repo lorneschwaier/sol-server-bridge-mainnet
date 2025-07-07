@@ -156,53 +156,6 @@ export default async function handler(req, res) {
       })
     }
 
-    if (pathname === "/submit-tx") {
-      if (req.method !== "POST") {
-        return res.status(405).json({ error: "Method not allowed" })
-      }
-
-      console.log("📡 SUBMITTING SIGNED TRANSACTION TO BLOCKCHAIN")
-      const { signedTransaction, walletAddress, productId } = req.body
-
-      if (!signedTransaction) {
-        return res.status(400).json({
-          success: false,
-          error: "Missing signed transaction",
-        })
-      }
-
-      try {
-        // Deserialize the signed transaction
-        const txBuffer = Buffer.from(signedTransaction, "base64")
-        const transaction = Transaction.from(txBuffer)
-
-        console.log("🚀 Sending transaction to Solana mainnet...")
-
-        // Send the transaction to the blockchain
-        const signature = await connection.sendRawTransaction(transaction.serialize())
-        console.log("📡 Transaction sent with signature:", signature)
-
-        // Confirm the transaction
-        console.log("⏳ Confirming transaction...")
-        await connection.confirmTransaction(signature, "confirmed")
-        console.log("✅ Transaction confirmed on mainnet!")
-
-        return res.status(200).json({
-          success: true,
-          signature: signature,
-          message: "🎉 REAL TRANSACTION CONFIRMED ON MAINNET!",
-          explorer_url: `https://explorer.solana.com/tx/${signature}`,
-          mode: "REAL_PRODUCTION",
-        })
-      } catch (error) {
-        console.error("❌ Transaction submission error:", error)
-        return res.status(500).json({
-          success: false,
-          error: error.message || "Transaction submission failed",
-        })
-      }
-    }
-
     if (pathname === "/mint-nft") {
       if (req.method !== "POST") {
         return res.status(405).json({ error: "Method not allowed" })
