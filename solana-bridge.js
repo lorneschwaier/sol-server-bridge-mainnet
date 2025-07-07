@@ -1,5 +1,5 @@
 // FINAL MAINNET BRIDGE - EXPLICIT MAINNET CONFIGURATION
-import { Connection } from "@solana/web3.js"
+import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
 import { createNft } from "@metaplex-foundation/mpl-token-metadata"
 import { createSignerFromKeypair, signerIdentity, generateSigner, percentAmount } from "@metaplex-foundation/umi"
@@ -34,6 +34,78 @@ export default async function handler(req, res) {
         network: "mainnet-beta",
         rpc: MAINNET_RPC_URL,
       })
+    }
+
+    if (pathname === "/api/prepare-transaction") {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" })
+      }
+      console.log("💰 /api/prepare-transaction route hit")
+      try {
+        const { fromAddress, toAddress, amountSOL } = req.body
+
+        if (!fromAddress || !toAddress || !amountSOL) {
+          return res.status(400).json({ error: "Missing required parameters" })
+        }
+
+        const connection = new Connection(MAINNET_RPC_URL, "confirmed")
+        const fromPubkey = new PublicKey(fromAddress)
+        const toPubkey = new PublicKey(toAddress)
+        const lamports = Math.floor(amountSOL * LAMPORTS_PER_SOL)
+
+        const { blockhash } = await connection.getLatestBlockhash("finalized")
+
+        const transaction = new Transaction({
+          feePayer: fromPubkey,
+          recentBlockhash: blockhash,
+        }).add(
+          SystemProgram.transfer({
+            fromPubkey: fromPubkey,
+            toPubkey: toPubkey,
+            lamports: lamports,
+          }),
+        )
+
+        const serializedTransaction = transaction.serialize({
+          requireAllSignatures: false,
+          verifySignatures: false,
+        })
+
+        return res.status(200).json({
+          success: true,
+          transaction: serializedTransaction.toString("base64"),
+        })
+      } catch (error) {
+        console.error("❌ Error in /api/prepare-transaction:", error)
+        return res.status(500).json({ success: false, error: error.message })
+      }
+    }
+
+    if (pathname === "/api/send-transaction") {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" })
+      }
+      console.log("💸 /api/send-transaction route hit")
+      try {
+        const { signedTransaction } = req.body
+
+        if (!signedTransaction) {
+          return res.status(400).json({ error: "Missing signedTransaction" })
+        }
+
+        const connection = new Connection(MAINNET_RPC_URL, "confirmed")
+        const rawTransaction = Buffer.from(signedTransaction, "base64")
+        const signature = await connection.sendRawTransaction(rawTransaction)
+        await connection.confirmTransaction(signature, "finalized")
+
+        return res.status(200).json({
+          success: true,
+          signature: signature,
+        })
+      } catch (error) {
+        console.error("❌ Error in /api/send-transaction:", error)
+        return res.status(500).json({ success: false, error: error.message })
+      }
     }
 
     if (pathname === "/mint-nft") {
