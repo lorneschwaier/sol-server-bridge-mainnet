@@ -132,13 +132,15 @@ export default async function handler(req, res) {
         verifySignatures: false,
       })
 
-      console.log("📝 Transaction created and serialized")
-      console.log("💡 Customer will sign this transaction")
+      console.log("✅ REAL TRANSACTION CREATED - Customer must sign this")
+      console.log(`💸 Amount: ${amount} SOL (${lamports} lamports)`)
+      console.log(`🎯 From: ${walletAddress}`)
+      console.log(`🏪 To: ${merchantKeypair.publicKey.toString()}`)
 
-      // Return transaction in proper format
+      // Return transaction for customer to sign
       return res.status(200).json({
         success: true,
-        message: "🔥 REAL transaction ready for customer signature",
+        message: "🔥 REAL TRANSACTION READY - Customer must sign",
         transaction: serializedTransaction.toString("base64"),
         blockhash: blockhash,
         amount: amount,
