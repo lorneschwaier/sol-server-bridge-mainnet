@@ -1,51 +1,58 @@
-// Clean payment processing endpoint
+import { Connection, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+
+const RPC_URL = process.env.SOLANA_RPC_URL;
+const CREATOR_WALLET = process.env.CREATOR_WALLET; // Your destination wallet address
+
 export default async function handler(req, res) {
-  // Enable CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
 
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({ success: false, error: "Method not allowed" });
   }
 
   try {
-    console.log("💸 Processing SOL payment request");
-
     const { walletAddress, amount, productId } = req.body;
 
     if (!walletAddress || !amount || !productId) {
-      return res.status(400).json({
-        success: false,
-        error: "Missing required parameters",
-      });
+      return res.status(400).json({ success: false, error: "Missing required parameters" });
     }
 
-    // Generate mock signature for demo
-    const fakeSignature = `DEMO_TX_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const connection = new Connection(RPC_URL, "confirmed");
+    const fromPubkey = new PublicKey(walletAddress);
+    const toPubkey = new PublicKey(CREATOR_WALLET);
 
-    console.log("✅ Payment received (DEMO):", {
-      wallet: walletAddress,
-      amount,
-      productId,
-      signature: fakeSignature,
+    // Create transaction
+    const blockhash = await connection.getLatestBlockhash();
+    const tx = new Transaction({
+      recentBlockhash: blockhash.blockhash,
+      feePayer: fromPubkey,
+    }).add(
+      SystemProgram.transfer({
+        fromPubkey,
+        toPubkey,
+        lamports: Math.round(amount * 1e9), // convert SOL to lamports
+      })
+    );
+
+    // Serialize to base64 for frontend signing
+    const serialized = tx.serialize({
+      requireAllSignatures: false, // so Phantom can sign it
+      verifySignatures: false,
     });
+
+    const base64Tx = serialized.toString("base64");
 
     return res.status(200).json({
       success: true,
-      signature: fakeSignature,
-      message: "✅ Demo payment processed",
-      mode: "DEMO",
+      transaction: base64Tx,
+      message: "🔗 Transaction created successfully",
     });
-  } catch (error) {
-    console.error("❌ Payment error:", error);
-    return res.status(500).json({
-      success: false,
-      error: error.message,
-    });
+  } catch (err) {
+    console.error("❌ Transaction creation error:", err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 }
