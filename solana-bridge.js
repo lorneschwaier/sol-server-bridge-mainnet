@@ -3,7 +3,6 @@ import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, Ke
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
 import { createNft, mplTokenMetadata } from "@metaplex-foundation/mpl-token-metadata"
 import { createSignerFromKeypair, signerIdentity, generateSigner } from "@metaplex-foundation/umi"
-import bs58 from "bs58"
 
 const connection = new Connection(process.env.RPC_URL || "https://api.mainnet-beta.solana.com", "confirmed")
 
@@ -18,17 +17,35 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Handle different endpoints
     const url = new URL(req.url, `http://${req.headers.host}`)
     const pathname = url.pathname
 
     if (pathname === "/health") {
+      // Check if merchant wallet has SOL
+      let walletBalance = 0
+      let walletAddress = "Not configured"
+
+      if (process.env.CREATOR_PRIVATE_KEY) {
+        try {
+          const privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY)
+          const merchantKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
+          walletAddress = merchantKeypair.publicKey.toString()
+
+          const balance = await connection.getBalance(merchantKeypair.publicKey)
+          walletBalance = balance / LAMPORTS_PER_SOL
+        } catch (error) {
+          console.error("Error checking wallet balance:", error)
+        }
+      }
+
       return res.status(200).json({
-        status: "healthy",
-        network: process.env.SOLANA_NETWORK || "mainnet-beta",
-        mode: process.env.NODE_ENV || "development",
-        sdk: "Metaplex UMI v0.9.2",
-        realSolanaIntegration: true,
+        status: "🔥 READY FOR REAL NFTS",
+        network: "mainnet-beta",
+        mode: "PRODUCTION - REAL SOL TRANSACTIONS",
+        merchantWallet: walletAddress,
+        merchantBalance: `${walletBalance.toFixed(4)} SOL`,
+        readyToMint: walletBalance > 0.01,
+        warning: "⚠️ REAL MONEY WILL BE SPENT",
         timestamp: new Date().toISOString(),
       })
     }
@@ -38,9 +55,7 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: "Method not allowed" })
       }
 
-      console.log("💰 /send-tx route hit - UMI VERSION")
-      console.log("📋 Request body:", req.body)
-
+      console.log("💰 REAL TRANSACTION MODE - SPENDING ACTUAL SOL")
       const { walletAddress, amount } = req.body
 
       if (!walletAddress || !amount) {
@@ -50,49 +65,59 @@ export default async function handler(req, res) {
         })
       }
 
-      // Check production requirements
-      const hasPrivateKey = process.env.CREATOR_PRIVATE_KEY
-      const isProduction = process.env.NODE_ENV === "production"
-
-      if (!isProduction || !hasPrivateKey) {
-        console.log("⚠️ Running in DEMO mode")
-        const demoSignature = `DEMO_TX_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        return res.status(200).json({
-          success: true,
-          signature: demoSignature,
-          message: "Transaction processed (simulated for demo)",
-          mode: "demo",
-        })
+      // Verify we have private key
+      if (!process.env.CREATOR_PRIVATE_KEY) {
+        throw new Error("CREATOR_PRIVATE_KEY not configured - cannot process real transactions")
       }
 
-      // REAL TRANSACTION PROCESSING with UMI
-      console.log("🚀 Processing REAL transaction with UMI")
-
-      // Parse private key
+      // Parse private key and create merchant keypair
       const privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY)
       const merchantKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
+
+      console.log("🏪 Merchant wallet:", merchantKeypair.publicKey.toString())
+
+      // Check merchant wallet balance
+      const merchantBalance = await connection.getBalance(merchantKeypair.publicKey)
+      const merchantSOL = merchantBalance / LAMPORTS_PER_SOL
+
+      console.log(`💰 Merchant balance: ${merchantSOL.toFixed(4)} SOL`)
+
+      if (merchantSOL < 0.01) {
+        throw new Error(
+          `Insufficient merchant wallet balance: ${merchantSOL.toFixed(4)} SOL. Need at least 0.01 SOL for transactions.`,
+        )
+      }
 
       // Validate customer wallet
       let customerPublicKey
       try {
         customerPublicKey = new PublicKey(walletAddress)
       } catch (error) {
-        throw new Error("Invalid wallet address format")
+        throw new Error("Invalid customer wallet address format")
       }
 
-      // Convert amount to lamports
+      // Check customer wallet balance
+      const customerBalance = await connection.getBalance(customerPublicKey)
+      const customerSOL = customerBalance / LAMPORTS_PER_SOL
+
+      console.log(`👤 Customer balance: ${customerSOL.toFixed(4)} SOL`)
+
       const lamports = Math.floor(amount * LAMPORTS_PER_SOL)
-      console.log(`💰 Processing payment: ${amount} SOL (${lamports} lamports)`)
+
+      if (customerBalance < lamports) {
+        throw new Error(`Customer has insufficient balance: ${customerSOL.toFixed(4)} SOL, needs ${amount} SOL`)
+      }
 
       // Get recent blockhash
       const { blockhash } = await connection.getLatestBlockhash("confirmed")
 
-      // Create transaction
+      // Create REAL transaction that customer will sign
       const transaction = new Transaction({
         feePayer: customerPublicKey,
         recentBlockhash: blockhash,
       })
 
+      // Add transfer instruction (customer pays merchant)
       transaction.add(
         SystemProgram.transfer({
           fromPubkey: customerPublicKey,
@@ -101,17 +126,29 @@ export default async function handler(req, res) {
         }),
       )
 
-      // Create a proper mainnet signature
-      const signature = bs58.encode(Buffer.from(`MAINNET_TX_${Date.now()}_${walletAddress.slice(-8)}`))
+      // Serialize transaction for customer to sign
+      const serializedTransaction = transaction.serialize({
+        requireAllSignatures: false,
+        verifySignatures: false,
+      })
 
-      console.log("✅ REAL transaction prepared with UMI")
+      console.log("✅ REAL TRANSACTION CREATED - Customer must sign this")
+      console.log(`💸 Amount: ${amount} SOL (${lamports} lamports)`)
+      console.log(`🎯 From: ${walletAddress}`)
+      console.log(`🏪 To: ${merchantKeypair.publicKey.toString()}`)
 
+      // Return transaction for customer to sign
       return res.status(200).json({
         success: true,
-        signature: signature,
-        message: "🎉 REAL transaction prepared for mainnet with UMI!",
-        mode: "production",
-        sdk: "UMI",
+        message: "🔥 REAL TRANSACTION READY - Customer must sign",
+        transaction: serializedTransaction.toString("base64"),
+        blockhash: blockhash,
+        amount: amount,
+        lamports: lamports,
+        from: walletAddress,
+        to: merchantKeypair.publicKey.toString(),
+        mode: "REAL_PRODUCTION",
+        note: "Customer wallet must sign this transaction",
       })
     }
 
@@ -120,9 +157,7 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: "Method not allowed" })
       }
 
-      console.log("🎨 /mint-nft route hit - UMI VERSION")
-      console.log("📋 Request body:", req.body)
-
+      console.log("🎨 REAL NFT MINTING - SPENDING ACTUAL SOL FOR NFT CREATION")
       const { walletAddress, metadata, transactionSignature } = req.body
 
       if (!walletAddress || !metadata) {
@@ -132,30 +167,29 @@ export default async function handler(req, res) {
         })
       }
 
-      // Check production requirements
-      const hasPrivateKey = process.env.CREATOR_PRIVATE_KEY
-      const isProduction = process.env.NODE_ENV === "production"
-
-      if (!isProduction || !hasPrivateKey) {
-        console.log("⚠️ Running in DEMO mode - creating mock NFT")
-        const demoMintAddress = `DEMO_MINT_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        return res.status(200).json({
-          success: true,
-          mint_address: demoMintAddress,
-          message: "NFT minted (simulated for demo)",
-          mode: "demo",
-        })
+      // Verify we have private key
+      if (!process.env.CREATOR_PRIVATE_KEY) {
+        throw new Error("CREATOR_PRIVATE_KEY not configured - cannot mint real NFTs")
       }
-
-      // REAL NFT MINTING with UMI
-      console.log("🚀 Minting REAL NFT with UMI")
 
       // Parse private key
       const privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY)
       const merchantKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
 
-      // Create UMI instance
-      const umi = createUmi(process.env.RPC_URL || "https://api.mainnet-beta.solana.com")
+      console.log("🏪 Minting with wallet:", merchantKeypair.publicKey.toString())
+
+      // Check merchant wallet balance for NFT creation fees
+      const merchantBalance = await connection.getBalance(merchantKeypair.publicKey)
+      const merchantSOL = merchantBalance / LAMPORTS_PER_SOL
+
+      console.log(`💰 Merchant balance for NFT creation: ${merchantSOL.toFixed(4)} SOL`)
+
+      if (merchantSOL < 0.01) {
+        throw new Error(`Insufficient balance for NFT creation: ${merchantSOL.toFixed(4)} SOL. Need at least 0.01 SOL.`)
+      }
+
+      // Create UMI instance for REAL mainnet
+      const umi = createUmi("https://api.mainnet-beta.solana.com")
       umi.use(mplTokenMetadata())
 
       // Convert Keypair to UMI format
@@ -166,47 +200,82 @@ export default async function handler(req, res) {
       // Generate mint address
       const mint = generateSigner(umi)
 
-      console.log("🎨 Creating NFT with UMI on mainnet...")
+      console.log("🎨 Creating REAL NFT on MAINNET with UMI...")
+      console.log("💸 This will spend REAL SOL for:")
+      console.log("   - Account creation fees")
+      console.log("   - Metadata storage fees")
+      console.log("   - Transaction fees")
 
-      // Create NFT with UMI
-      await createNft(umi, {
-        mint,
-        name: metadata.name,
-        symbol: "XENO",
-        uri: `data:application/json;base64,${Buffer.from(JSON.stringify(metadata)).toString("base64")}`,
-        sellerFeeBasisPoints: 500, // 5%
-        creators: [
-          {
-            address: signer.publicKey,
-            verified: true,
-            share: 100,
-          },
-        ],
-      }).sendAndConfirm(umi)
+      try {
+        // Create the ACTUAL NFT on mainnet - THIS COSTS REAL SOL
+        const result = await createNft(umi, {
+          mint,
+          name: metadata.name,
+          symbol: "XENO",
+          uri: `data:application/json;base64,${Buffer.from(JSON.stringify(metadata)).toString("base64")}`,
+          sellerFeeBasisPoints: 500, // 5%
+          creators: [
+            {
+              address: signer.publicKey,
+              verified: true,
+              share: 100,
+            },
+          ],
+          isMutable: true,
+        }).sendAndConfirm(umi) // ← THIS LINE ACTUALLY SENDS TO BLOCKCHAIN AND COSTS SOL
 
-      const mintAddress = mint.publicKey.toString()
+        const mintAddress = mint.publicKey.toString()
 
-      console.log("✅ REAL NFT minted with UMI on MAINNET!")
-      console.log("🎯 Mint address:", mintAddress)
+        console.log("🎉 REAL NFT SUCCESSFULLY MINTED ON MAINNET!")
+        console.log("🎯 Mint address:", mintAddress)
+        console.log("💸 Real SOL was spent for this NFT")
 
-      return res.status(200).json({
-        success: true,
-        mint_address: mintAddress,
-        message: "🎉 REAL NFT minted successfully with UMI on mainnet!",
-        explorer_url: `https://explorer.solana.com/address/${mintAddress}`,
-        mode: "production",
-        sdk: "UMI",
-        network: "mainnet-beta",
-      })
+        // Verify the NFT exists on mainnet
+        const nftAccount = await connection.getAccountInfo(new PublicKey(mintAddress))
+        const verified = !!nftAccount
+
+        console.log("✅ NFT verified on mainnet:", verified)
+
+        // Check updated merchant balance
+        const newBalance = await connection.getBalance(merchantKeypair.publicKey)
+        const newSOL = newBalance / LAMPORTS_PER_SOL
+        const spent = merchantSOL - newSOL
+
+        console.log(`💰 SOL spent on NFT creation: ${spent.toFixed(6)} SOL`)
+        console.log(`💰 Remaining balance: ${newSOL.toFixed(4)} SOL`)
+
+        return res.status(200).json({
+          success: true,
+          mint_address: mintAddress,
+          message: "🎉 REAL NFT MINTED ON MAINNET WITH REAL SOL!",
+          explorer_url: `https://explorer.solana.com/address/${mintAddress}`,
+          mode: "REAL_PRODUCTION",
+          network: "mainnet-beta",
+          verified: verified,
+          solSpent: spent.toFixed(6),
+          remainingBalance: newSOL.toFixed(4),
+          transactionResult: result,
+        })
+      } catch (error) {
+        console.error("❌ REAL NFT MINTING FAILED:", error)
+
+        // Check if it's a balance issue
+        if (error.message.includes("insufficient")) {
+          throw new Error("Insufficient SOL balance for NFT creation. Please fund your merchant wallet.")
+        }
+
+        throw new Error(`NFT minting failed: ${error.message}`)
+      }
     }
 
     return res.status(404).json({ error: "Endpoint not found" })
   } catch (error) {
-    console.error("❌ Function error:", error)
+    console.error("❌ REAL TRANSACTION ERROR:", error)
     return res.status(500).json({
-      error: "Internal server error",
-      message: error.message,
-      stack: error.stack,
+      success: false,
+      error: error.message,
+      mode: "REAL_PRODUCTION_ERROR",
+      note: "This was a real transaction attempt that failed",
     })
   }
 }
