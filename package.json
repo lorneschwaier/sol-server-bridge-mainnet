@@ -1,15 +1,11 @@
 {
-  "name": "solana-bridge-mainnet-fixed",
-  "version": "2.0.0",
+  "name": "solana-bridge-clean",
+  "version": "1.0.0",
   "type": "module",
-  "scripts": {
-    "start": "node bridge-server-final.js",
-    "dev": "node bridge-server-final.js"
-  },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
     "@solana/web3.js": "^1.87.6"
+  },
+  "engines": {
+    "node": "18.x"
   }
 }
