@@ -6,6 +6,23 @@ import { createSignerFromKeypair, signerIdentity, generateSigner, percentAmount 
 import { bundlrUploader } from "@metaplex-foundation/umi-uploader-bundlr"
 import * as bs58 from "bs58"
 
+// Helper function to parse JSON body from requests
+async function parseJSON(req) {
+  return new Promise((resolve, reject) => {
+    let body = ""
+    req.on("data", (chunk) => {
+      body += chunk.toString()
+    })
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(body))
+      } catch (error) {
+        reject(error)
+      }
+    })
+  })
+}
+
 // --- EXPLICIT MAINNET CONFIGURATION ---
 const MAINNET_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
 console.log("--- BRIDGE SERVER INITIALIZING ON MAINNET ---")
@@ -42,7 +59,8 @@ export default async function handler(req, res) {
       }
       console.log("💰 /api/prepare-transaction route hit")
       try {
-        const { fromAddress, toAddress, amountSOL } = req.body
+        const body = await parseJSON(req)
+        const { fromAddress, toAddress, amountSOL } = body
 
         if (!fromAddress || !toAddress || !amountSOL) {
           return res.status(400).json({ error: "Missing required parameters" })
@@ -87,7 +105,8 @@ export default async function handler(req, res) {
       }
       console.log("💸 /api/send-transaction route hit")
       try {
-        const { signedTransaction } = req.body
+        const body = await parseJSON(req)
+        const { signedTransaction } = body
 
         if (!signedTransaction) {
           return res.status(400).json({ error: "Missing signedTransaction" })
@@ -114,7 +133,8 @@ export default async function handler(req, res) {
       }
 
       console.log("🎨 === INCOMING MAINNET NFT MINT REQUEST ===")
-      const { walletAddress, metadata, transactionSignature } = req.body
+      const body = await parseJSON(req)
+      const { walletAddress, metadata, transactionSignature } = body
 
       if (!walletAddress || !metadata || !metadata.name || !metadata.image) {
         console.error("❌ Missing required parameters:", { walletAddress, metadata })
