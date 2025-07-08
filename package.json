@@ -2,7 +2,6 @@
   "name": "sol-server-bridge",
   "version": "1.0.0",
   "main": "solana-bridge.js",
-  "type": "module",
   "dependencies": {
     "@metaplex-foundation/umi": "^1.2.0",
     "@metaplex-foundation/umi-bundle-defaults": "^1.2.0",
