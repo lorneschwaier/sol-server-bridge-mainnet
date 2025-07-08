@@ -18,7 +18,6 @@ module.exports = async (req, res) => {
   try {
     // Check environment variables
     const requiredEnvVars = ["SOLANA_RPC_URL", "CREATOR_PRIVATE_KEY", "PINATA_API_KEY", "PINATA_SECRET_KEY"]
-
     const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
 
     if (missingVars.length > 0) {
