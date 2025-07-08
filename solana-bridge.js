@@ -185,3 +185,4 @@ app.post("/mint-nft", async (req, res) => {
     res.status(500).json({ success: false, error: err })
   }
 })
+export default app
