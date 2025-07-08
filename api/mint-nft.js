@@ -27,8 +27,11 @@ let signer
 
 function initializeServices() {
   try {
+    console.log("🔧 Initializing services...")
+
     // Initialize Solana connection
     connection = new Connection(RPC_URL, "confirmed")
+    console.log("✅ Solana connection initialized")
 
     // Parse private key
     let secretArray
@@ -44,7 +47,7 @@ function initializeServices() {
     signer = createSignerFromKeypair(umi, umiKeypair)
     umi.use(signerIdentity(signer))
 
-    console.log("✅ Services initialized. Signer:", signer.publicKey.toString())
+    console.log("✅ UMI signer ready:", signer.publicKey.toString())
     return true
   } catch (error) {
     console.error("❌ Failed to initialize services:", error)
@@ -144,6 +147,7 @@ module.exports = async (req, res) => {
 
   try {
     console.log("🎨 Starting NFT minting process...")
+    console.log("📋 Request body:", JSON.stringify(req.body, null, 2))
 
     // Validate request body
     const { walletAddress, metadata } = req.body
@@ -255,7 +259,7 @@ module.exports = async (req, res) => {
       collection: collection
         ? {
             key: collection,
-            verified: false, // Set to true if you want to verify collection
+            verified: false,
           }
         : undefined,
       updateAuthority: signer,
