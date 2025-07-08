@@ -1,20 +1,18 @@
 {
-  "name": "solana-bridge",
+  "name": "sol-server-bridge",
   "version": "1.0.0",
   "main": "solana-bridge.js",
   "type": "module",
-  "scripts": {
-    "start": "node solana-bridge.js"
-  },
   "dependencies": {
-    "axios": "^1.6.8",
-    "cors": "^2.8.5",
-    "express": "^4.18.2",
-    "@solana/web3.js": "^1.95.2",
     "@metaplex-foundation/umi": "^1.2.0",
     "@metaplex-foundation/umi-bundle-defaults": "^1.2.0",
     "@metaplex-foundation/mpl-token-metadata": "^3.3.0",
+    "@solana/web3.js": "^1.95.2",
+    "axios": "^1.6.8",
     "bs58": "^5.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
     "form-data": "^4.0.0"
   }
 }
+
