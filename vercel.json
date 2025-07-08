@@ -2,20 +2,25 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/mint-nft.cjs",
+      "src": "api/*.cjs",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/mint-nft",
+      "src": "/api/mint-nft",
       "methods": ["POST"],
       "dest": "/api/mint-nft.cjs"
     },
     {
-      "src": "/.*",
+      "src": "/api/health",
+      "methods": ["GET"],
+      "dest": "/api/health.cjs"
+    },
+    {
+      "src": "/(.*)",
       "status": 404,
-      "dest": "/api/mint-nft.cjs"
+      "dest": "/api/health.cjs"
     }
   ]
 }
