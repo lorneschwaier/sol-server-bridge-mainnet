@@ -1,11 +1,13 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/**/*.js",
-      "use": "@vercel/node"
+  "functions": {
+    "api/health.js": {
+      "runtime": "@vercel/node"
+    },
+    "api/mint-nft.js": {
+      "runtime": "@vercel/node"
     }
-  ],
+  },
   "routes": [
     {
       "src": "/health",
@@ -14,6 +16,16 @@
     {
       "src": "/mint-nft",
       "dest": "/api/mint-nft.js"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/health",
+      "destination": "/api/health"
+    },
+    {
+      "source": "/mint-nft",
+      "destination": "/api/mint-nft"
     }
   ]
 }
