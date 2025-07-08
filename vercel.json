@@ -2,25 +2,20 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/*.cjs",
+      "src": "api/solana-bridge.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/api/mint-nft",
+      "src": "/mint-nft",
       "methods": ["POST"],
-      "dest": "/api/mint-nft.cjs"
+      "dest": "/api/solana-bridge.js"
     },
     {
-      "src": "/api/health",
+      "src": "/health",
       "methods": ["GET"],
-      "dest": "/api/health.cjs"
-    },
-    {
-      "src": "/(.*)",
-      "status": 404,
-      "dest": "/api/health.cjs"
+      "dest": "/api/solana-bridge.js"
     }
   ]
 }
