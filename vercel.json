@@ -1,16 +1,13 @@
 {
   "version": 2,
   "builds": [
-    {
-      "src": "api/mint-nft.cjs",
-      "use": "@vercel/node"
-    }
+    { "src": "api/mint-nft.cjs", "use": "@vercel/node" }
   ],
   "routes": [
     {
       "src": "/mint-nft",
       "methods": ["POST"],
-      "dest": "/api/mint-nft.cjs"
+      "dest": "api/mint-nft.cjs"
     }
   ]
 }
