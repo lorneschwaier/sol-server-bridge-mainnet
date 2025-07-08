@@ -1,3 +1,4 @@
+
 const express = require("express")
 const cors = require("cors")
 const {
@@ -48,7 +49,7 @@ function initUmi() {
 
     umi.use(signerIdentity(signer))
     umi.use(mplTokenMetadata())
-    console.log("✅ UMI ready for minting")
+    console.log("✅ UMI ready for minting:", creatorKeypair.publicKey.toBase58())
   } catch (e) {
     console.error("UMI init failed:", e.message)
   }
@@ -139,13 +140,17 @@ async function createNFT(walletAddress, metadata, uri) {
   }
 }
 
-// ✅ MINT-NFT ROUTE
 app.post("/mint-nft", async (req, res) => {
   console.log("🔥 /mint-nft route hit")
 
   try {
     const { walletAddress, metadata } = req.body
     if (!walletAddress || !metadata) throw new Error("Missing walletAddress or metadata")
+
+    const bridgeWalletBalance = await connection.getBalance(creatorKeypair.publicKey)
+    if (bridgeWalletBalance < 0.005 * LAMPORTS_PER_SOL) {
+      throw new Error("Bridge wallet has insufficient SOL to mint NFT")
+    }
 
     const imageUrl = metadata.image.startsWith("http") ? await uploadImageToPinata(metadata.image) : metadata.image
 
@@ -176,79 +181,7 @@ app.post("/mint-nft", async (req, res) => {
     })
   } catch (e) {
     console.error("❌ Minting failed:", e)
-    res.status(500).json({ success: false, error: e.message })
+    const err = e.logs ? e.logs.join("\n") : e.message || "Unknown error"
+    res.status(500).json({ success: false, error: err })
   }
 })
-
-// ✅ SEND-TX ROUTE
-app.post("/send-tx", async (req, res) => {
-  try {
-    const { walletAddress, amount } = req.body
-    if (!walletAddress || !amount) {
-      return res.status(400).json({ success: false, error: "Missing walletAddress or amount" })
-    }
-
-    const payer = new PublicKey(walletAddress)
-    const receiver = creatorKeypair.publicKey
-
-    const blockhashInfo = await connection.getLatestBlockhash("finalized")
-
-    const transaction = new Transaction({
-      recentBlockhash: blockhashInfo.blockhash,
-      feePayer: payer,
-    })
-
-    transaction.add(
-      SystemProgram.transfer({
-        fromPubkey: payer,
-        toPubkey: receiver,
-        lamports: Math.floor(Number.parseFloat(amount) * LAMPORTS_PER_SOL),
-      }),
-    )
-
-    const serializedTransaction = transaction.serialize({
-      requireAllSignatures: false,
-      verifySignatures: false,
-    })
-
-    const base64Tx = serializedTransaction.toString("base64")
-
-    res.json({ success: true, transaction: base64Tx })
-  } catch (err) {
-    console.error("❌ /send-tx error:", err)
-    res.status(500).json({ success: false, error: err.message })
-  }
-})
-
-// ✅ HEALTHCHECK
-app.get("/health", async (_, res) => {
-  res.json({
-    status: "ok",
-    creator: creatorKeypair?.publicKey.toString() || "missing",
-    pinata: !!PINATA_API_KEY && !!PINATA_SECRET_KEY,
-    umiReady: !!umi,
-    network: SOLANA_NETWORK,
-  })
-})
-
-// ✅ BLOCKHASH (OPTIONAL)
-app.post("/blockhash", async (req, res) => {
-  try {
-    const response = await connection.getLatestBlockhash("finalized")
-    res.json({
-      jsonrpc: "2.0",
-      result: {
-        value: {
-          blockhash: response.blockhash,
-          lastValidBlockHeight: response.lastValidBlockHeight,
-        },
-      },
-      id: req.body.id || 1,
-    })
-  } catch (error) {
-    console.error("Blockhash fetch failed:", error)
-    res.status(500).json({ error: error.message })
-  }
-})
-
-module.exports = app
