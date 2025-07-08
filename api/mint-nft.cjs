@@ -1,61 +1,95 @@
+const {
+  Connection,
+  Keypair,
+  LAMPORTS_PER_SOL,
+  clusterApiUrl,
+  PublicKey
+} = require("@solana/web3.js");
 
-const { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } = require("@solana/web3.js");
-const { createUmi } = require("@metaplex-foundation/umi-bundle-defaults");
-const { createNft, mplTokenMetadata } = require("@metaplex-foundation/mpl-token-metadata");
-const { createSignerFromKeypair, signerIdentity, generateSigner, publicKey } = require("@metaplex-foundation/umi");
+const {
+  createUmi,
+  generateSigner,
+  signerIdentity,
+  publicKey,
+  createSignerFromKeypair
+} = require("@metaplex-foundation/umi");
+
+const { mplTokenMetadata, createNft } = require("@metaplex-foundation/mpl-token-metadata");
 const bs58 = require("bs58");
+const axios = require("axios");
+const FormData = require("form-data");
 
-require("dotenv").config();
-
-const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta";
+const RPC_URL = process.env.SOLANA_RPC_URL || clusterApiUrl("mainnet-beta");
 const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY;
+const COLLECTION_MINT_ADDRESS = process.env.COLLECTION_MINT_ADDRESS;
+const PINATA_API_KEY = process.env.PINATA_API_KEY;
+const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY;
 
-const connection = new Connection(clusterApiUrl(SOLANA_NETWORK), "confirmed");
-const umi = createUmi(clusterApiUrl(SOLANA_NETWORK));
-umi.use(mplTokenMetadata());
+const connection = new Connection(RPC_URL, "confirmed");
 
-async function createNFT(walletAddress, metadata, uri) {
-  const mint = generateSigner(umi);
-  const owner = publicKey(walletAddress);
+let umi = null;
+let signer = null;
 
-  const privateKeyArray = CREATOR_PRIVATE_KEY.startsWith("[")
+function initUmi() {
+  const secretArray = CREATOR_PRIVATE_KEY.startsWith("[")
     ? JSON.parse(CREATOR_PRIVATE_KEY)
     : Array.from(bs58.decode(CREATOR_PRIVATE_KEY));
 
-  const umiKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(privateKeyArray));
-  const signer = createSignerFromKeypair(umi, umiKeypair);
+  umi = createUmi(RPC_URL).use(mplTokenMetadata());
+
+  const umiKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(secretArray));
+  signer = createSignerFromKeypair(umi, umiKeypair);
   umi.use(signerIdentity(signer));
 
-  const tx = await createNft(umi, {
-    mint,
-    name: metadata.name || "Unnamed NFT",
-    symbol: metadata.symbol || "NFT",
-    uri,
-    sellerFeeBasisPoints: (metadata.royalty || 0) * 100,
-    creators: [
-      {
-        address: signer.publicKey,
-        verified: true,
-        share: 100,
-      },
-    ],
-    tokenOwner: owner,
-    updateAuthority: signer,
-    mintAuthority: signer,
-    payer: signer,
-    isMutable: true,
-  }).sendAndConfirm(umi);
-
-  return {
-    mint: mint.publicKey.toString(),
-    signature: tx.signature,
-    explorer: `https://explorer.solana.com/address/${mint.publicKey.toString()}${SOLANA_NETWORK.includes("mainnet") ? "" : "?cluster=devnet"}`,
-  };
+  console.log("✅ UMI signer ready:", signer.publicKey.toString());
 }
 
-module.exports = async function handler(req, res) {
+initUmi();
+
+async function uploadImage(imageUrl) {
+  const response = await axios.get(imageUrl, { responseType: "stream" });
+  const ext = imageUrl.split(".").pop().split("?")[0];
+  const fileName = `nft-image-${Date.now()}.${ext}`;
+  const form = new FormData();
+
+  form.append("file", response.data, {
+    filename: fileName,
+    contentType: response.headers["content-type"] || "image/png"
+  });
+
+  form.append("pinataMetadata", JSON.stringify({ name: fileName }));
+
+  const res = await axios.post("https://api.pinata.cloud/pinning/pinFileToIPFS", form, {
+    headers: {
+      ...form.getHeaders(),
+      pinata_api_key: PINATA_API_KEY,
+      pinata_secret_api_key: PINATA_SECRET_KEY
+    }
+  });
+
+  return `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`;
+}
+
+async function uploadMetadata(metadata) {
+  const res = await axios.post(
+    "https://api.pinata.cloud/pinning/pinJSONToIPFS",
+    {
+      pinataContent: metadata,
+      pinataMetadata: { name: `nft-metadata-${Date.now()}.json` }
+    },
+    {
+      headers: {
+        pinata_api_key: PINATA_API_KEY,
+        pinata_secret_api_key: PINATA_SECRET_KEY
+      }
+    }
+  );
+  return `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`;
+}
+
+module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -63,33 +97,73 @@ module.exports = async function handler(req, res) {
 
   try {
     const { walletAddress, metadata } = req.body;
-    if (!walletAddress || !metadata || !metadata.image) {
-      return res.status(400).json({ success: false, error: "Missing parameters" });
+
+    if (!walletAddress || !metadata) {
+      return res.status(400).json({ success: false, error: "Missing walletAddress or metadata" });
     }
 
-    const uri = metadata.image;
-    const privateKeyArray = CREATOR_PRIVATE_KEY.startsWith("[")
-      ? JSON.parse(CREATOR_PRIVATE_KEY)
-      : Array.from(bs58.decode(CREATOR_PRIVATE_KEY));
-
-    const solanaKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
-    const creatorBalance = await connection.getBalance(new PublicKey(solanaKeypair.publicKey.toString()));
+    const creatorBalance = await connection.getBalance(signer.publicKey);
     if (creatorBalance < 0.005 * LAMPORTS_PER_SOL) {
-      return res.status(400).json({ success: false, error: "Insufficient balance to mint NFT" });
+      return res.status(400).json({ success: false, error: "Insufficient SOL in mint wallet" });
     }
 
-    const mintResult = await createNFT(walletAddress, metadata, uri);
+    const imageUrl = metadata.image.startsWith("http")
+      ? await uploadImage(metadata.image)
+      : metadata.image;
+
+    const fullMetadata = {
+      name: metadata.name || "Untitled",
+      symbol: metadata.symbol || "NFT",
+      image: imageUrl,
+      seller_fee_basis_points: (metadata.royalty || 0) * 100,
+      properties: {
+        creators: [
+          {
+            address: signer.publicKey.toString(),
+            share: 100
+          }
+        ]
+      }
+    };
+
+    const uri = await uploadMetadata(fullMetadata);
+    const mint = generateSigner(umi);
+    const owner = publicKey(walletAddress);
+    const collection = COLLECTION_MINT_ADDRESS ? publicKey(COLLECTION_MINT_ADDRESS) : null;
+
+    const tx = await createNft(umi, {
+      mint,
+      name: fullMetadata.name,
+      symbol: fullMetadata.symbol,
+      uri,
+      sellerFeeBasisPoints: fullMetadata.seller_fee_basis_points,
+      creators: [
+        {
+          address: signer.publicKey,
+          verified: true,
+          share: 100
+        }
+      ],
+      tokenOwner: owner,
+      collection: collection ? { key: collection, verified: true } : undefined,
+      updateAuthority: signer,
+      mintAuthority: signer,
+      payer: signer,
+      isMutable: true
+    }).sendAndConfirm(umi);
 
     return res.status(200).json({
       success: true,
-      mint_address: mintResult.mint,
-      transaction_signature: mintResult.signature,
-      explorer_url: mintResult.explorer,
-      network: SOLANA_NETWORK,
-      message: "✅ NFT minted successfully!",
+      mint_address: mint.publicKey.toString(),
+      transaction_signature: tx.signature,
+      explorer_url: `https://explorer.solana.com/address/${mint.publicKey.toString()}`,
+      uri
     });
-  } catch (error) {
-    console.error("❌ NFT minting error:", error);
-    return res.status(500).json({ success: false, error: error.message });
+  } catch (e) {
+    console.error("❌ NFT minting error:", e);
+    res.status(500).json({
+      success: false,
+      error: e.message || "Internal error"
+    });
   }
 };
