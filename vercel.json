@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/mint-nft.js",
+      "src": "api/mint-nft.cjs",
       "use": "@vercel/node"
     }
   ]
