@@ -104,6 +104,13 @@ async function createNFT(walletAddress, metadata, uri) {
 
   const collectionKey = process.env.COLLECTION_MINT_ADDRESS ? publicKey(process.env.COLLECTION_MINT_ADDRESS) : null
 
+  const privateKeyArray = CREATOR_PRIVATE_KEY.startsWith("[")
+    ? JSON.parse(CREATOR_PRIVATE_KEY)
+    : Array.from(bs58.decode(CREATOR_PRIVATE_KEY))
+
+  const umiKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(privateKeyArray))
+  const signer = createSignerFromKeypair(umi, umiKeypair)
+
   const tx = await createNft(umi, {
     mint,
     name: metadata.name || "Unnamed",
@@ -112,7 +119,7 @@ async function createNFT(walletAddress, metadata, uri) {
     sellerFeeBasisPoints: (metadata.royalty || 0) * 100,
     creators: [
       {
-        address: umi.identity.publicKey,
+        address: signer.publicKey,
         verified: true,
         share: 100,
       },
@@ -120,6 +127,9 @@ async function createNFT(walletAddress, metadata, uri) {
     tokenOwner: owner,
     collection: collectionKey ? { key: collectionKey, verified: true } : undefined,
     isMutable: true,
+    updateAuthority: signer,
+    mintAuthority: signer,
+    payer: signer,
   }).sendAndConfirm(umi)
 
   return {
