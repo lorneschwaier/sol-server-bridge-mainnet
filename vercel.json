@@ -2,10 +2,20 @@
   "version": 2,
   "functions": {
     "api/health.js": {
-      "runtime": "nodejs18.x"
+      "runtime": "@vercel/node@1.14.0"
     },
     "api/mint-nft.js": {
-      "runtime": "nodejs18.x"
+      "runtime": "@vercel/node@1.14.0"
     }
-  }
+  },
+  "routes": [
+    {
+      "src": "/health",
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/mint-nft",
+      "dest": "/api/mint-nft.js"
+    }
+  ]
 }
