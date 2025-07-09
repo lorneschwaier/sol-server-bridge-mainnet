@@ -1,4 +1,4 @@
-{
+={
   "name": "solana-nft-bridge-mainnet",
   "version": "1.0.0",
   "description": "Solana NFT minting bridge for mainnet",
@@ -8,9 +8,9 @@
     "deploy": "vercel --prod"
   },
   "dependencies": {
-    "@metaplex-foundation/umi": "^0.15.2",
-    "@metaplex-foundation/umi-bundle-defaults": "^0.15.2",
-    "@metaplex-foundation/mpl-token-metadata": "^3.2.1",
+    "@metaplex-foundation/umi": "^0.15.4",
+    "@metaplex-foundation/umi-bundle-defaults": "^0.15.4",
+    "@metaplex-foundation/mpl-token-metadata": "^3.3.0",
     "@solana/web3.js": "^1.95.2",
     "axios": "^1.6.8",
     "bs58": "^5.0.0",
@@ -20,4 +20,3 @@
     "node": ">=18.0.0"
   }
 }
-
