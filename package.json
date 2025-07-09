@@ -2,7 +2,6 @@
   "name": "solana-nft-bridge-mainnet",
   "version": "1.0.0",
   "description": "Solana NFT minting bridge for mainnet",
-  "main": "api/mint-nft.js",
   "scripts": {
     "dev": "vercel dev",
     "deploy": "vercel --prod"
