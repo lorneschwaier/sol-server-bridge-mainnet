@@ -43,8 +43,8 @@ function initializeServices() {
     }
 
     // Initialize UMI
-    umi = createUmi(RPC_URL)
-    umi.use(mplTokenMetadata())
+umi = createUmi(RPC_URL).use(mplTokenMetadata())
+
 
     const umiKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(secretArray))
     signer = createSignerFromKeypair(umi, umiKeypair)
