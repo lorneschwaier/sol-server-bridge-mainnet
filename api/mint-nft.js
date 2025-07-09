@@ -1,18 +1,19 @@
-const { Connection, PublicKey, Keypair } = require("@solana/web3.js")
 const { createUmi } = require("@metaplex-foundation/umi")
 const { web3JsRpc } = require("@metaplex-foundation/umi-rpc-web3js")
 const { web3JsEddsa } = require("@metaplex-foundation/umi-eddsa-web3js")
-const { mplTokenMetadata } = require("@metaplex-foundation/mpl-token-metadata")
+const { mplTokenMetadata, createNft } = require("@metaplex-foundation/mpl-token-metadata")
+const { createSignerFromKeypair, signerIdentity, generateSigner } = require("@metaplex-foundation/umi")
+const { base58 } = require("@metaplex-foundation/umi/serializers")
 const bs58 = require("bs58")
 
-// Global variables for services
 let umi = null
 let creatorKeypair = null
 
 async function initializeServices() {
-  console.log("🚀 Initializing minting services...")
+  console.log("🚀 Initializing UMI services for mainnet...")
 
   try {
+    // Get environment variables
     const RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
     const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
 
@@ -20,71 +21,40 @@ async function initializeServices() {
       throw new Error("CREATOR_PRIVATE_KEY environment variable is required")
     }
 
-    if (!RPC_URL) {
-      throw new Error("SOLANA_RPC_URL environment variable is required")
-    }
+    console.log("🔗 Using RPC:", RPC_URL)
 
-    console.log("🔗 Creating UMI instance...")
-
-    // Create UMI with correct plugins
+    // Initialize UMI with correct plugins
     umi = createUmi(RPC_URL).use(web3JsRpc()).use(web3JsEddsa()).use(mplTokenMetadata())
 
-    console.log("✅ UMI instance created successfully")
+    console.log("✅ UMI initialized successfully")
 
-    // Create creator keypair
-    console.log("🔑 Setting up creator keypair...")
+    // Setup creator keypair
+    const privateKeyBytes = bs58.decode(CREATOR_PRIVATE_KEY)
+    creatorKeypair = umi.eddsa.createKeypairFromSecretKey(privateKeyBytes)
+    const creatorSigner = createSignerFromKeypair(umi, creatorKeypair)
 
-    let privateKeyBytes
-    try {
-      // Try base58 decode first
-      privateKeyBytes = bs58.decode(CREATOR_PRIVATE_KEY)
-    } catch (e) {
-      try {
-        // Try JSON array format
-        privateKeyBytes = new Uint8Array(JSON.parse(CREATOR_PRIVATE_KEY))
-      } catch (e2) {
-        throw new Error("Invalid CREATOR_PRIVATE_KEY format. Must be base58 string or JSON array")
-      }
-    }
+    // Set the creator as the identity
+    umi.use(signerIdentity(creatorSigner))
 
-    if (privateKeyBytes.length !== 64) {
-      throw new Error(`Invalid private key length: ${privateKeyBytes.length}. Expected 64 bytes.`)
-    }
-
-    creatorKeypair = Keypair.fromSecretKey(privateKeyBytes)
-    console.log("✅ Creator keypair created:", creatorKeypair.publicKey.toString())
-
-    // Set the identity
-    const { createSignerFromKeypair } = require("@metaplex-foundation/umi")
-    const creatorSigner = createSignerFromKeypair(umi, {
-      publicKey: creatorKeypair.publicKey.toString(),
-      secretKey: privateKeyBytes,
-    })
-
-    umi = umi.use({
-      install: (context) => {
-        context.identity = creatorSigner
-      },
-    })
-
+    console.log("✅ Creator keypair configured:", creatorKeypair.publicKey)
     console.log("✅ Services initialized successfully")
+
     return true
   } catch (error) {
     console.error("❌ Failed to initialize services:", error)
-    throw new Error(`Failed to initialize minting services - ${error.message}`)
+    throw new Error(`UMI initialization failed: ${error.message}`)
   }
 }
 
 async function uploadMetadataToIPFS(metadata) {
-  console.log("📤 Uploading metadata to IPFS...")
+  console.log("📤 Uploading metadata to IPFS via Pinata...")
 
   try {
     const PINATA_API_KEY = process.env.PINATA_API_KEY
     const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
 
     if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
-      console.log("⚠️ Pinata keys not found, using placeholder URI")
-      return "https://placeholder-metadata.com/nft.json"
+      throw new Error("Pinata API keys not configured")
     }
 
     const axios = require("axios")
@@ -97,38 +67,34 @@ async function uploadMetadataToIPFS(metadata) {
       },
     })
 
-    const metadataUri = `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`
+    const ipfsHash = response.data.IpfsHash
+    const metadataUri = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`
+
     console.log("✅ Metadata uploaded to IPFS:", metadataUri)
     return metadataUri
   } catch (error) {
     console.error("❌ IPFS upload failed:", error)
-    return "https://placeholder-metadata.com/nft.json"
+    throw new Error(`IPFS upload failed: ${error.message}`)
   }
 }
 
 async function mintNFT(walletAddress, metadata) {
   console.log("🎨 Starting NFT minting process...")
+  console.log("👤 Recipient:", walletAddress)
+  console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
 
   try {
-    if (!umi || !creatorKeypair) {
-      throw new Error("Services not initialized")
-    }
-
     // Upload metadata to IPFS
     const metadataUri = await uploadMetadataToIPFS(metadata)
 
-    // Generate a new mint keypair
-    const { generateSigner } = require("@metaplex-foundation/umi")
+    // Generate a new mint address
     const mint = generateSigner(umi)
-
-    console.log("🎯 Mint address:", mint.publicKey)
-    console.log("👤 Recipient:", walletAddress)
-    console.log("📋 Metadata URI:", metadataUri)
+    console.log("🆔 Generated mint address:", mint.publicKey)
 
     // Create the NFT
-    const { createNft } = require("@metaplex-foundation/mpl-token-metadata")
+    console.log("🔨 Creating NFT on Solana mainnet...")
 
-    const createNftInstruction = createNft(umi, {
+    const result = await createNft(umi, {
       mint,
       name: metadata.name,
       symbol: metadata.symbol || "NFT",
@@ -136,28 +102,29 @@ async function mintNFT(walletAddress, metadata) {
       sellerFeeBasisPoints: metadata.royalty || 0,
       creators: [
         {
-          address: creatorKeypair.publicKey.toString(),
+          address: creatorKeypair.publicKey,
           verified: true,
           share: 100,
         },
       ],
-      owner: walletAddress,
-    })
-
-    console.log("📝 Sending create NFT transaction...")
-
-    const result = await createNftInstruction.sendAndConfirm(umi)
+      tokenOwner: walletAddress,
+      tokenStandard: 0, // NonFungible
+    }).sendAndConfirm(umi)
 
     console.log("✅ NFT created successfully!")
-    console.log("🔗 Transaction signature:", result.signature)
+    console.log("🔗 Transaction signature:", base58.deserialize(result.signature)[0])
+
+    const mintAddress = mint.publicKey
+    const transactionSignature = base58.deserialize(result.signature)[0]
 
     return {
       success: true,
-      mint_address: mint.publicKey,
-      transaction_signature: result.signature,
+      mint_address: mintAddress,
+      transaction_signature: transactionSignature,
       metadata_uri: metadataUri,
-      explorer_url: `https://explorer.solana.com/address/${mint.publicKey}?cluster=mainnet-beta`,
-      transaction_url: `https://explorer.solana.com/tx/${result.signature}?cluster=mainnet-beta`,
+      explorer_url: `https://explorer.solana.com/address/${mintAddress}`,
+      transaction_url: `https://explorer.solana.com/tx/${transactionSignature}`,
+      network: "mainnet-beta",
     }
   } catch (error) {
     console.error("❌ NFT minting failed:", error)
@@ -168,61 +135,66 @@ async function mintNFT(walletAddress, metadata) {
 module.exports = async (req, res) => {
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 
   if (req.method === "OPTIONS") {
-    return res.status(200).end()
+    res.status(200).end()
+    return
   }
 
   if (req.method !== "POST") {
     return res.status(405).json({
       success: false,
-      error: "Method not allowed",
+      error: "Method not allowed. Use POST.",
     })
   }
 
+  console.log("🎨 === NFT MINTING REQUEST RECEIVED ===")
+  console.log("📋 Request body:", JSON.stringify(req.body, null, 2))
+
   try {
-    console.log("🎨 === NFT MINTING REQUEST ===")
-    console.log("📋 Request body:", JSON.stringify(req.body, null, 2))
+    // Initialize services if not already done
+    if (!umi || !creatorKeypair) {
+      console.log("🔄 Initializing services...")
+      await initializeServices()
+    }
 
     const { walletAddress, metadata } = req.body
 
+    // Validate input
     if (!walletAddress || !metadata) {
+      console.log("❌ Missing required fields")
       return res.status(400).json({
         success: false,
         error: "Missing required fields: walletAddress and metadata",
       })
     }
 
-    // Validate wallet address
-    try {
-      new PublicKey(walletAddress)
-    } catch (e) {
+    if (!metadata.name || !metadata.image) {
+      console.log("❌ Invalid metadata")
       return res.status(400).json({
         success: false,
-        error: "Invalid wallet address format",
+        error: "Metadata must include name and image",
       })
     }
 
-    // Initialize services if not already done
-    if (!umi || !creatorKeypair) {
-      await initializeServices()
-    }
+    console.log("✅ Input validation passed")
 
     // Mint the NFT
     const result = await mintNFT(walletAddress, metadata)
 
-    console.log("✅ Minting completed successfully")
-    return res.status(200).json(result)
+    console.log("🎉 NFT minting completed successfully!")
+    console.log("📋 Final result:", JSON.stringify(result, null, 2))
+
+    res.status(200).json(result)
   } catch (error) {
-    console.error("❌ Minting error:", error)
+    console.error("❌ NFT minting error:", error)
     console.error("❌ Stack trace:", error.stack)
 
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
-      error: error.message,
-      timestamp: new Date().toISOString(),
+      error: `Failed to initialize minting services - ${error.message}`,
     })
   }
 }
