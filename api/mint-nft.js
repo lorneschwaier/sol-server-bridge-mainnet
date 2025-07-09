@@ -14,6 +14,7 @@ const { mplTokenMetadata, createNft } = require("@metaplex-foundation/mpl-token-
 const bs58 = require("bs58")
 const axios = require("axios")
 
+// UPDATED: July 9, 2025 - Force deployment refresh
 // Configuration using your environment variables
 const RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
 const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
@@ -28,7 +29,7 @@ let signer
 
 function initializeServices() {
   try {
-    console.log("🔧 Initializing services...")
+    console.log("🔧 Initializing services... (Updated July 9, 2025)")
     console.log("🔧 Environment check:")
     console.log("- Network:", process.env.SOLANA_NETWORK || "mainnet-beta")
     console.log("- RPC_URL:", RPC_URL ? "✅ Set" : "❌ Missing")
@@ -40,6 +41,10 @@ function initializeServices() {
     // Check required environment variables
     if (!CREATOR_PRIVATE_KEY) {
       throw new Error("CREATOR_PRIVATE_KEY environment variable is required")
+    }
+
+    if (!RPC_URL) {
+      throw new Error("SOLANA_RPC_URL environment variable is required")
     }
 
     // Initialize Solana connection
@@ -132,7 +137,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    console.log("🎨 Starting NFT minting process...")
+    console.log("🎨 Starting NFT minting process... (Updated July 9, 2025)")
     console.log("📋 Request body:", JSON.stringify(req.body, null, 2))
 
     // Validate request body
@@ -162,7 +167,7 @@ module.exports = async (req, res) => {
       if (!initialized) {
         return res.status(500).json({
           success: false,
-          error: "Failed to initialize minting services - check environment variables",
+          error: "Failed to initialize minting services - UMI initialization failed",
         })
       }
     }
@@ -265,6 +270,7 @@ module.exports = async (req, res) => {
       message: "NFT minted successfully on Solana mainnet!",
       creator_wallet: CREATOR_WALLET,
       network: process.env.SOLANA_NETWORK || "mainnet-beta",
+      updated: "July 9, 2025",
     })
   } catch (error) {
     console.error("❌ NFT minting error:", error)
@@ -293,6 +299,7 @@ module.exports = async (req, res) => {
       error: errorMessage,
       details: process.env.NODE_ENV === "development" ? error.stack : undefined,
       timestamp: new Date().toISOString(),
+      updated: "July 9, 2025",
     })
   }
 }
