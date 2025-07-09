@@ -1,19 +1,10 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "api/*.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/health",
-      "dest": "/api/health.js"
+  "functions": {
+    "api/mint-nft.js": {
+      "maxDuration": 30
     },
-    {
-      "src": "/mint-nft",
-      "dest": "/api/mint-nft.js"
+    "api/health.js": {
+      "maxDuration": 10
     }
-  ]
+  }
 }
