@@ -8,13 +8,14 @@ const {
   createSignerFromKeypair,
 } = require("@metaplex-foundation/umi")
 
-const { createUmiBundle } = require("@metaplex-foundation/umi-bundle-defaults")
+// FIXED: Use the correct imports for UMI
+const { web3JsRpc } = require("@metaplex-foundation/umi-rpc-web3js")
+const { web3JsEddsa } = require("@metaplex-foundation/umi-eddsa-web3js")
 const { mplTokenMetadata, createNft } = require("@metaplex-foundation/mpl-token-metadata")
 
 const bs58 = require("bs58")
 const axios = require("axios")
 
-// UPDATED: July 9, 2025 - Force deployment refresh
 // Configuration using your environment variables
 const RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
 const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
@@ -29,7 +30,7 @@ let signer
 
 function initializeServices() {
   try {
-    console.log("🔧 Initializing services... (Updated July 9, 2025)")
+    console.log("🔧 FIXED: Initializing services with correct UMI setup...")
     console.log("🔧 Environment check:")
     console.log("- Network:", process.env.SOLANA_NETWORK || "mainnet-beta")
     console.log("- RPC_URL:", RPC_URL ? "✅ Set" : "❌ Missing")
@@ -59,17 +60,15 @@ function initializeServices() {
       secretArray = Array.from(bs58.decode(CREATOR_PRIVATE_KEY))
     }
 
-    // FIXED: Initialize UMI with proper bundle defaults
-    console.log("🔧 Initializing UMI with bundle defaults...")
-    umi = createUmi(RPC_URL)
-      .use(createUmiBundle()) // ← FIXED: This provides the missing ProgramRepository
-      .use(mplTokenMetadata())
+    // FIXED: Initialize UMI with correct plugins (no createUmiBundle)
+    console.log("🔧 FIXED: Initializing UMI with correct plugins...")
+    umi = createUmi(RPC_URL).use(web3JsRpc()).use(web3JsEddsa()).use(mplTokenMetadata())
 
     const umiKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(secretArray))
     signer = createSignerFromKeypair(umi, umiKeypair)
     umi.use(signerIdentity(signer))
 
-    console.log("✅ UMI initialized with bundle defaults")
+    console.log("✅ FIXED: UMI initialized with correct plugins")
     console.log("✅ UMI signer ready:", signer.publicKey.toString())
     console.log("✅ Creator wallet:", CREATOR_WALLET)
 
@@ -137,7 +136,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    console.log("🎨 Starting NFT minting process... (Updated July 9, 2025)")
+    console.log("🎨 FIXED: Starting NFT minting process...")
     console.log("📋 Request body:", JSON.stringify(req.body, null, 2))
 
     // Validate request body
@@ -270,7 +269,7 @@ module.exports = async (req, res) => {
       message: "NFT minted successfully on Solana mainnet!",
       creator_wallet: CREATOR_WALLET,
       network: process.env.SOLANA_NETWORK || "mainnet-beta",
-      updated: "July 9, 2025",
+      fixed: "UMI bundle issue resolved",
     })
   } catch (error) {
     console.error("❌ NFT minting error:", error)
@@ -299,7 +298,7 @@ module.exports = async (req, res) => {
       error: errorMessage,
       details: process.env.NODE_ENV === "development" ? error.stack : undefined,
       timestamp: new Date().toISOString(),
-      updated: "July 9, 2025",
+      fixed: "UMI bundle issue resolved",
     })
   }
 }
