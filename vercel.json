@@ -7,15 +7,5 @@
     "api/mint-nft.js": {
       "runtime": "nodejs18.x"
     }
-  },
-  "routes": [
-    {
-      "src": "/health",
-      "dest": "/api/health.js"
-    },
-    {
-      "src": "/mint-nft",
-      "dest": "/api/mint-nft.js"
-    }
-  ]
+  }
 }
