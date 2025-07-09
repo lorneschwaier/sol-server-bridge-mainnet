@@ -17,15 +17,5 @@
       "src": "/mint-nft",
       "dest": "/api/mint-nft.js"
     }
-  ],
-  "rewrites": [
-    {
-      "source": "/health",
-      "destination": "/api/health"
-    },
-    {
-      "source": "/mint-nft",
-      "destination": "/api/mint-nft"
-    }
   ]
 }
