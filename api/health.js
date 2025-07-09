@@ -58,7 +58,7 @@ module.exports = async (req, res) => {
       required_vars: "✅ All required variables present",
       optional_vars: "✅ All optional variables present",
       rpc_url: process.env.SOLANA_RPC_URL,
-      final_fix_applied: "July 9, 2025 - UMI corrected",
+      final_fix_applied: "July 9, 2025 - UMI corrected + routing fixed",
     })
   } catch (error) {
     console.error("❌ Health check failed:", error)
