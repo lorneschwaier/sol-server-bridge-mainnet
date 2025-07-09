@@ -5,6 +5,7 @@ const {
   generateSigner,
   signerIdentity,
   publicKey,
+  createGenericProgramRepository,
   createSignerFromKeypair,
 } = require("@metaplex-foundation/umi")
 
@@ -42,7 +43,10 @@ function initializeServices() {
     }
 
     // Initialize UMI
-    umi = createUmi(RPC_URL).use(mplTokenMetadata())
+    umi = createUmi(RPC_URL)
+    umi.programs = createGenericProgramRepository() // 👈 Critical line
+    umi.use(mplTokenMetadata())
+
     const umiKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(secretArray))
     signer = createSignerFromKeypair(umi, umiKeypair)
     umi.use(signerIdentity(signer))
