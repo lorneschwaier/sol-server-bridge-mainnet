@@ -5,35 +5,39 @@ module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 
   if (req.method === "OPTIONS") {
-    res.status(200).end()
-    return
+    return res.status(200).end()
   }
 
   try {
     console.log("🏥 Health check requested")
 
-    // Return the exact format WordPress expects
-    const healthResponse = {
-      success: true,
-      status: "ok",
-      message: "Bridge server is healthy and ready for mainnet NFT minting",
-      network: process.env.SOLANA_NETWORK || "mainnet-beta",
-      rpcUrl: process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
-      timestamp: new Date().toISOString(),
-      version: "1.0.0",
+    // Check environment variables
+    const envCheck = {
+      CREATOR_PRIVATE_KEY: !!process.env.CREATOR_PRIVATE_KEY,
+      CREATOR_WALLET: !!process.env.CREATOR_WALLET,
+      PINATA_API_KEY: !!process.env.PINATA_API_KEY,
+      PINATA_SECRET_KEY: !!process.env.PINATA_SECRET_KEY,
+      SOLANA_RPC_URL: !!process.env.SOLANA_RPC_URL,
     }
 
-    console.log("✅ Health check response:", healthResponse)
+    const allEnvPresent = Object.values(envCheck).every(Boolean)
 
-    res.status(200).json(healthResponse)
+    return res.status(200).json({
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || "development",
+      network: process.env.SOLANA_NETWORK || "mainnet-beta",
+      rpc_url: process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
+      env_variables: envCheck,
+      all_env_present: allEnvPresent,
+      message: allEnvPresent ? "Bridge server is ready" : "Missing environment variables",
+    })
   } catch (error) {
-    console.error("❌ Health check error:", error)
-
-    res.status(500).json({
-      success: false,
-      status: "error",
-      message: "Health check failed",
+    console.error("❌ Health check failed:", error)
+    return res.status(500).json({
+      status: "unhealthy",
       error: error.message,
+      timestamp: new Date().toISOString(),
     })
   }
 }
