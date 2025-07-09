@@ -44,7 +44,6 @@ function initializeServices() {
 
     // Initialize UMI
     umi = createUmi(RPC_URL)
-    umi.programs = createGenericProgramRepository() // 👈 Critical line
     umi.use(mplTokenMetadata())
 
     const umiKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(secretArray))
