@@ -1,4 +1,21 @@
 {
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/*.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/health",
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/mint-nft",
+      "dest": "/api/mint-nft.js"
+    }
+  ],
   "functions": {
     "api/mint-nft.js": {
       "maxDuration": 30
@@ -6,5 +23,9 @@
     "api/health.js": {
       "maxDuration": 10
     }
+  },
+  "env": {
+    "SOLANA_NETWORK": "mainnet-beta",
+    "SOLANA_RPC_URL": "https://api.mainnet-beta.solana.com"
   }
 }
