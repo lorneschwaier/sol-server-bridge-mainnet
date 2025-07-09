@@ -14,7 +14,7 @@ const bs58 = require("bs58")
 const axios = require("axios")
 const FormData = require("form-data")
 
-// Configuration with better error handling
+// Configuration
 const RPC_URL = process.env.SOLANA_RPC_URL || clusterApiUrl("mainnet-beta")
 const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
 const COLLECTION_MINT_ADDRESS = process.env.COLLECTION_MINT_ADDRESS
@@ -37,10 +37,6 @@ function initializeServices() {
     // Check required environment variables
     if (!CREATOR_PRIVATE_KEY) {
       throw new Error("CREATOR_PRIVATE_KEY environment variable is required")
-    }
-
-    if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
-      console.warn("⚠️ PINATA keys missing - image upload will be skipped")
     }
 
     // Initialize Solana connection
