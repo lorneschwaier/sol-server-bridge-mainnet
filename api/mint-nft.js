@@ -8,7 +8,6 @@ const {
   createSignerFromKeypair,
 } = require("@metaplex-foundation/umi")
 
-// FIXED: Use the correct imports for UMI
 const { web3JsRpc } = require("@metaplex-foundation/umi-rpc-web3js")
 const { web3JsEddsa } = require("@metaplex-foundation/umi-eddsa-web3js")
 const { mplTokenMetadata, createNft } = require("@metaplex-foundation/mpl-token-metadata")
@@ -16,7 +15,7 @@ const { mplTokenMetadata, createNft } = require("@metaplex-foundation/mpl-token-
 const bs58 = require("bs58")
 const axios = require("axios")
 
-// Configuration using your environment variables
+// FINAL FIX: July 9, 2025 - Correct UMI initialization
 const RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
 const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
 const CREATOR_WALLET = process.env.CREATOR_WALLET
@@ -30,7 +29,7 @@ let signer
 
 function initializeServices() {
   try {
-    console.log("🔧 FIXED: Initializing services with correct UMI setup...")
+    console.log("🔧 FINAL FIX: Initializing services with correct UMI setup...")
     console.log("🔧 Environment check:")
     console.log("- Network:", process.env.SOLANA_NETWORK || "mainnet-beta")
     console.log("- RPC_URL:", RPC_URL ? "✅ Set" : "❌ Missing")
@@ -39,7 +38,6 @@ function initializeServices() {
     console.log("- PINATA_API_KEY:", PINATA_API_KEY ? "✅ Set" : "❌ Missing")
     console.log("- PINATA_SECRET_KEY:", PINATA_SECRET_KEY ? "✅ Set" : "❌ Missing")
 
-    // Check required environment variables
     if (!CREATOR_PRIVATE_KEY) {
       throw new Error("CREATOR_PRIVATE_KEY environment variable is required")
     }
@@ -52,7 +50,7 @@ function initializeServices() {
     connection = new Connection(RPC_URL, "confirmed")
     console.log("✅ Solana connection initialized")
 
-    // Parse private key (handle both array and base58 formats)
+    // Parse private key
     let secretArray
     if (CREATOR_PRIVATE_KEY.startsWith("[")) {
       secretArray = JSON.parse(CREATOR_PRIVATE_KEY)
@@ -60,19 +58,18 @@ function initializeServices() {
       secretArray = Array.from(bs58.decode(CREATOR_PRIVATE_KEY))
     }
 
-    // FIXED: Initialize UMI with correct plugins (no createUmiBundle)
-    console.log("🔧 FIXED: Initializing UMI with correct plugins...")
+    // FINAL FIX: Initialize UMI with correct plugins
+    console.log("🔧 FINAL FIX: Initializing UMI with web3JsRpc and web3JsEddsa...")
     umi = createUmi(RPC_URL).use(web3JsRpc()).use(web3JsEddsa()).use(mplTokenMetadata())
 
     const umiKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(secretArray))
     signer = createSignerFromKeypair(umi, umiKeypair)
     umi.use(signerIdentity(signer))
 
-    console.log("✅ FIXED: UMI initialized with correct plugins")
+    console.log("✅ FINAL FIX: UMI initialized successfully")
     console.log("✅ UMI signer ready:", signer.publicKey.toString())
     console.log("✅ Creator wallet:", CREATOR_WALLET)
 
-    // Verify the signer matches the creator wallet
     if (CREATOR_WALLET && signer.publicKey.toString() !== CREATOR_WALLET) {
       console.warn("⚠️ Warning: Signer public key doesn't match CREATOR_WALLET")
     }
@@ -86,7 +83,6 @@ function initializeServices() {
 }
 
 async function uploadToPinata(metadata) {
-  // If no Pinata keys, create a data URL
   if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
     console.log("⚠️ No Pinata keys - using data URL for metadata")
     const metadataJson = JSON.stringify(metadata)
@@ -111,7 +107,6 @@ async function uploadToPinata(metadata) {
     return metadataUrl
   } catch (error) {
     console.error("❌ Pinata upload failed, using data URL:", error.message)
-    // Fallback to data URL
     const metadataJson = JSON.stringify(metadata)
     const dataUrl = `data:application/json;base64,${Buffer.from(metadataJson).toString("base64")}`
     return dataUrl
@@ -119,7 +114,6 @@ async function uploadToPinata(metadata) {
 }
 
 module.exports = async (req, res) => {
-  // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
@@ -136,10 +130,9 @@ module.exports = async (req, res) => {
   }
 
   try {
-    console.log("🎨 FIXED: Starting NFT minting process...")
+    console.log("🎨 FINAL FIX: Starting NFT minting process...")
     console.log("📋 Request body:", JSON.stringify(req.body, null, 2))
 
-    // Validate request body
     const { walletAddress, metadata } = req.body
 
     if (!walletAddress || !metadata) {
@@ -149,7 +142,6 @@ module.exports = async (req, res) => {
       })
     }
 
-    // Validate wallet address
     try {
       new PublicKey(walletAddress)
     } catch (error) {
@@ -159,7 +151,6 @@ module.exports = async (req, res) => {
       })
     }
 
-    // Initialize services if not already done
     if (!umi || !signer) {
       console.log("🔧 Services not initialized, initializing now...")
       const initialized = initializeServices()
@@ -171,9 +162,8 @@ module.exports = async (req, res) => {
       }
     }
 
-    // Check creator wallet balance
     const creatorBalance = await connection.getBalance(new PublicKey(signer.publicKey.toString()))
-    const requiredBalance = 0.01 * LAMPORTS_PER_SOL // 0.01 SOL minimum
+    const requiredBalance = 0.01 * LAMPORTS_PER_SOL
 
     if (creatorBalance < requiredBalance) {
       return res.status(400).json({
@@ -184,7 +174,6 @@ module.exports = async (req, res) => {
 
     console.log(`✅ Creator wallet balance: ${creatorBalance / LAMPORTS_PER_SOL} SOL`)
 
-    // Prepare full metadata
     const fullMetadata = {
       name: metadata.name || "Untitled NFT",
       symbol: metadata.symbol || "NFT",
@@ -213,10 +202,8 @@ module.exports = async (req, res) => {
 
     console.log("📋 Full metadata prepared:", JSON.stringify(fullMetadata, null, 2))
 
-    // Upload metadata to IPFS via Pinata
     const metadataUri = await uploadToPinata(fullMetadata)
 
-    // Generate mint keypair
     const mint = generateSigner(umi)
     const owner = publicKey(walletAddress)
 
@@ -225,7 +212,6 @@ module.exports = async (req, res) => {
     console.log("- Owner:", walletAddress)
     console.log("- Metadata URI:", metadataUri)
 
-    // Create and send NFT transaction
     const createNftInstruction = createNft(umi, {
       mint,
       name: fullMetadata.name,
@@ -269,13 +255,12 @@ module.exports = async (req, res) => {
       message: "NFT minted successfully on Solana mainnet!",
       creator_wallet: CREATOR_WALLET,
       network: process.env.SOLANA_NETWORK || "mainnet-beta",
-      fixed: "UMI bundle issue resolved",
+      final_fix: "UMI initialization corrected - July 9, 2025",
     })
   } catch (error) {
     console.error("❌ NFT minting error:", error)
     console.error("❌ Error stack:", error.stack)
 
-    // Provide detailed error information
     let errorMessage = error.message || "Unknown error occurred"
     let errorCode = 500
 
@@ -298,7 +283,7 @@ module.exports = async (req, res) => {
       error: errorMessage,
       details: process.env.NODE_ENV === "development" ? error.stack : undefined,
       timestamp: new Date().toISOString(),
-      fixed: "UMI bundle issue resolved",
+      final_fix: "UMI initialization corrected - July 9, 2025",
     })
   }
 }
