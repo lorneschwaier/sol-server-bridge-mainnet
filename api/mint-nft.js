@@ -5,7 +5,6 @@ const {
   generateSigner,
   signerIdentity,
   publicKey,
-  createGenericProgramRepository,
   createSignerFromKeypair,
 } = require("@metaplex-foundation/umi")
 
@@ -15,7 +14,7 @@ const bs58 = require("bs58")
 const axios = require("axios")
 const FormData = require("form-data")
 
-// Configuration
+// Configuration with better error handling
 const RPC_URL = process.env.SOLANA_RPC_URL || clusterApiUrl("mainnet-beta")
 const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
 const COLLECTION_MINT_ADDRESS = process.env.COLLECTION_MINT_ADDRESS
@@ -29,6 +28,20 @@ let signer
 function initializeServices() {
   try {
     console.log("🔧 Initializing services...")
+    console.log("🔧 Environment check:")
+    console.log("- RPC_URL:", RPC_URL ? "✅ Set" : "❌ Missing")
+    console.log("- CREATOR_PRIVATE_KEY:", CREATOR_PRIVATE_KEY ? "✅ Set" : "❌ Missing")
+    console.log("- PINATA_API_KEY:", PINATA_API_KEY ? "✅ Set" : "❌ Missing")
+    console.log("- PINATA_SECRET_KEY:", PINATA_SECRET_KEY ? "✅ Set" : "❌ Missing")
+
+    // Check required environment variables
+    if (!CREATOR_PRIVATE_KEY) {
+      throw new Error("CREATOR_PRIVATE_KEY environment variable is required")
+    }
+
+    if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
+      console.warn("⚠️ PINATA keys missing - image upload will be skipped")
+    }
 
     // Initialize Solana connection
     connection = new Connection(RPC_URL, "confirmed")
@@ -43,9 +56,7 @@ function initializeServices() {
     }
 
     // Initialize UMI
-umi = createUmi(RPC_URL).use(mplTokenMetadata())
-
-
+    umi = createUmi(RPC_URL).use(mplTokenMetadata())
     const umiKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(secretArray))
     signer = createSignerFromKeypair(umi, umiKeypair)
     umi.use(signerIdentity(signer))
@@ -53,12 +64,19 @@ umi = createUmi(RPC_URL).use(mplTokenMetadata())
     console.log("✅ UMI signer ready:", signer.publicKey.toString())
     return true
   } catch (error) {
-    console.error("❌ Failed to initialize services:", error)
+    console.error("❌ Failed to initialize services:", error.message)
+    console.error("❌ Stack trace:", error.stack)
     return false
   }
 }
 
 async function uploadImageToPinata(imageUrl) {
+  // Skip if no Pinata keys
+  if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
+    console.log("⚠️ Skipping image upload - using original URL:", imageUrl)
+    return imageUrl
+  }
+
   try {
     console.log("📸 Uploading image to Pinata:", imageUrl)
 
@@ -96,12 +114,21 @@ async function uploadImageToPinata(imageUrl) {
     console.log("✅ Image uploaded to IPFS:", ipfsUrl)
     return ipfsUrl
   } catch (error) {
-    console.error("❌ Image upload failed:", error)
-    throw new Error(`Image upload failed: ${error.message}`)
+    console.error("❌ Image upload failed, using original URL:", error.message)
+    return imageUrl // Fallback to original URL
   }
 }
 
 async function uploadMetadataToPinata(metadata) {
+  // Skip if no Pinata keys
+  if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
+    console.log("⚠️ Skipping metadata upload - Pinata keys not configured")
+    // Create a simple data URL for metadata
+    const metadataJson = JSON.stringify(metadata)
+    const dataUrl = `data:application/json;base64,${Buffer.from(metadataJson).toString("base64")}`
+    return dataUrl
+  }
+
   try {
     console.log("📋 Uploading metadata to Pinata")
 
@@ -126,8 +153,11 @@ async function uploadMetadataToPinata(metadata) {
     console.log("✅ Metadata uploaded to IPFS:", metadataUrl)
     return metadataUrl
   } catch (error) {
-    console.error("❌ Metadata upload failed:", error)
-    throw new Error(`Metadata upload failed: ${error.message}`)
+    console.error("❌ Metadata upload failed, using data URL:", error.message)
+    // Fallback to data URL
+    const metadataJson = JSON.stringify(metadata)
+    const dataUrl = `data:application/json;base64,${Buffer.from(metadataJson).toString("base64")}`
+    return dataUrl
   }
 }
 
@@ -174,11 +204,12 @@ module.exports = async (req, res) => {
 
     // Initialize services if not already done
     if (!umi || !signer) {
+      console.log("🔧 Services not initialized, initializing now...")
       const initialized = initializeServices()
       if (!initialized) {
         return res.status(500).json({
           success: false,
-          error: "Failed to initialize minting services",
+          error: "Failed to initialize minting services - check environment variables",
         })
       }
     }
@@ -196,7 +227,7 @@ module.exports = async (req, res) => {
 
     console.log(`✅ Creator wallet balance: ${creatorBalance / LAMPORTS_PER_SOL} SOL`)
 
-    // Process image upload
+    // Process image upload (with fallback)
     let imageUrl = metadata.image
     if (metadata.image && metadata.image.startsWith("http")) {
       imageUrl = await uploadImageToPinata(metadata.image)
@@ -229,7 +260,7 @@ module.exports = async (req, res) => {
 
     console.log("📋 Full metadata prepared:", JSON.stringify(fullMetadata, null, 2))
 
-    // Upload metadata to IPFS
+    // Upload metadata to IPFS (with fallback)
     const metadataUri = await uploadMetadataToPinata(fullMetadata)
 
     // Generate mint keypair
@@ -295,6 +326,7 @@ module.exports = async (req, res) => {
     })
   } catch (error) {
     console.error("❌ NFT minting error:", error)
+    console.error("❌ Error stack:", error.stack)
 
     // Provide detailed error information
     let errorMessage = error.message || "Unknown error occurred"
@@ -309,6 +341,9 @@ module.exports = async (req, res) => {
     } else if (error.message?.includes("timeout")) {
       errorMessage = "Request timeout. Please try again."
       errorCode = 504
+    } else if (error.message?.includes("environment variable")) {
+      errorMessage = "Server configuration error - missing environment variables"
+      errorCode = 500
     }
 
     return res.status(errorCode).json({
