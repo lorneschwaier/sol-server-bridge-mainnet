@@ -17,13 +17,16 @@ module.exports = async (req, res) => {
 
   try {
     // Check environment variables
-    const requiredEnvVars = ["SOLANA_RPC_URL", "CREATOR_PRIVATE_KEY", "PINATA_API_KEY", "PINATA_SECRET_KEY"]
-    const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
+    const requiredEnvVars = ["SOLANA_RPC_URL", "CREATOR_PRIVATE_KEY"]
+    const optionalEnvVars = ["PINATA_API_KEY", "PINATA_SECRET_KEY"]
 
-    if (missingVars.length > 0) {
+    const missingRequired = requiredEnvVars.filter((varName) => !process.env[varName])
+    const missingOptional = optionalEnvVars.filter((varName) => !process.env[varName])
+
+    if (missingRequired.length > 0) {
       return res.status(500).json({
         success: false,
-        error: `Missing environment variables: ${missingVars.join(", ")}`,
+        error: `Missing required environment variables: ${missingRequired.join(", ")}`,
         status: "unhealthy",
       })
     }
@@ -42,6 +45,11 @@ module.exports = async (req, res) => {
       message: "Bridge server is working!",
       solana_slot: slot,
       environment_check: "passed",
+      required_vars: "✅ All required variables present",
+      optional_vars:
+        missingOptional.length > 0
+          ? `⚠️ Missing optional: ${missingOptional.join(", ")}`
+          : "✅ All optional variables present",
     })
   } catch (error) {
     console.error("❌ Health check failed:", error)
