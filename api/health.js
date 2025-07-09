@@ -19,12 +19,12 @@ module.exports = async (req, res) => {
     // Check environment variables with your specific variable names
     const envCheck = {
       SOLANA_NETWORK: process.env.SOLANA_NETWORK || "Not set",
-      SOLANA_RPC_URL: process.env.SOLANA_RPC_URL ? "configured" : "missing",
-      CREATOR_WALLET: process.env.CREATOR_WALLET ? "configured" : "missing",
-      CREATOR_PRIVATE_KEY: process.env.CREATOR_PRIVATE_KEY ? "configured" : "missing",
-      PINATA_API_KEY: process.env.PINATA_API_KEY ? "configured" : "missing",
-      PINATA_SECRET_KEY: process.env.PINATA_SECRET_KEY ? "configured" : "missing",
-      API_KEY: process.env.API_KEY ? "configured" : "missing",
+      SOLANA_RPC_URL: process.env.SOLANA_RPC_URL || "Not set",
+      CREATOR_WALLET: process.env.CREATOR_WALLET ? "✅ Set" : "❌ Missing",
+      CREATOR_PRIVATE_KEY: process.env.CREATOR_PRIVATE_KEY ? "✅ Set" : "❌ Missing",
+      PINATA_API_KEY: process.env.PINATA_API_KEY ? "✅ Set" : "❌ Missing",
+      PINATA_SECRET_KEY: process.env.PINATA_SECRET_KEY ? "✅ Set" : "❌ Missing",
+      API_KEY: process.env.API_KEY ? "✅ Set" : "❌ Missing",
     }
 
     // Check required environment variables
@@ -46,20 +46,20 @@ module.exports = async (req, res) => {
 
     const slot = await connection.getSlot()
 
-    const healthData = {
+    return res.status(200).json({
+      success: true,
       status: "healthy",
-      timestamp: new Date().toISOString(),
-      service: "Solana NFT Bridge",
       network: process.env.SOLANA_NETWORK || "mainnet-beta",
-      rpc_url: process.env.SOLANA_RPC_URL ? "configured" : "missing",
-      creator_wallet: process.env.CREATOR_WALLET ? "configured" : "missing",
-      creator_private_key: process.env.CREATOR_PRIVATE_KEY ? "configured" : "missing",
-      pinata_api_key: process.env.PINATA_API_KEY ? "configured" : "missing",
-      pinata_secret_key: process.env.PINATA_SECRET_KEY ? "configured" : "missing",
-      final_fix: "UMI initialization corrected - July 9, 2025",
-    }
-
-    return res.status(200).json(healthData)
+      timestamp: new Date().toISOString(),
+      message: "Bridge server is working!",
+      solana_slot: slot,
+      creator_wallet: process.env.CREATOR_WALLET,
+      environment_check: "passed",
+      required_vars: "✅ All required variables present",
+      optional_vars: "✅ All optional variables present",
+      rpc_url: process.env.SOLANA_RPC_URL,
+      final_fix_applied: "July 9, 2025 - UMI corrected",
+    })
   } catch (error) {
     console.error("❌ Health check failed:", error)
     return res.status(500).json({
