@@ -17,5 +17,6 @@
       "src": "/mint-nft",
       "dest": "/api/mint-nft.js"
     }
-  ]
+  ],
+  "buildCommand": "npm install --legacy-peer-deps"
 }
