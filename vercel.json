@@ -1,13 +1,11 @@
 {
   "version": 2,
-  "functions": {
-    "api/health.js": {
-      "runtime": "@vercel/node@1.14.0"
-    },
-    "api/mint-nft.js": {
-      "runtime": "@vercel/node@1.14.0"
+  "builds": [
+    {
+      "src": "api/*.js",
+      "use": "@vercel/node"
     }
-  },
+  ],
   "routes": [
     {
       "src": "/health",
@@ -17,6 +15,5 @@
       "src": "/mint-nft",
       "dest": "/api/mint-nft.js"
     }
-  ],
-  "buildCommand": "npm install --legacy-peer-deps"
+  ]
 }
