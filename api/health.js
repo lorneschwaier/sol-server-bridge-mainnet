@@ -12,12 +12,5 @@ export default function handler(req, res) {
     status: "ok",
     timestamp: new Date().toISOString(),
     message: "Solana NFT Bridge is running",
-    environment: {
-      nodeVersion: process.version,
-      platform: process.platform,
-      solanaNetwork: process.env.SOLANA_NETWORK || "mainnet-beta",
-      pinataConfigured: !!(process.env.PINATA_API_KEY && process.env.PINATA_SECRET_KEY),
-      creatorKeyConfigured: !!process.env.CREATOR_PRIVATE_KEY,
-    },
   })
 }
