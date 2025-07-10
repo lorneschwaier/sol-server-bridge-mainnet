@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Solana NFT Bridge API for WordPress",
   "main": "api/health.js",
+  "type": "module",
   "scripts": {
     "dev": "vercel dev",
     "build": "echo 'No build step required'",
