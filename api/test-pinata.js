@@ -1,4 +1,7 @@
+const axios = require("axios")
+
 export default async function handler(req, res) {
+  // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
@@ -8,64 +11,54 @@ export default async function handler(req, res) {
     return
   }
 
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" })
+  }
+
+  const PINATA_API_KEY = process.env.PINATA_API_KEY
+  const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
+
+  if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
+    return res.status(400).json({
+      error: "Pinata credentials not configured",
+      message: "Please set PINATA_API_KEY and PINATA_SECRET_KEY environment variables",
+    })
+  }
+
   try {
-    if (!process.env.PINATA_API_KEY || !process.env.PINATA_SECRET_KEY) {
-      return res.status(500).json({
-        success: false,
-        error: "Pinata API credentials not configured",
-      })
+    // Test Pinata connection by uploading a simple JSON
+    const testData = {
+      message: "Test from Solana NFT Bridge",
+      timestamp: new Date().toISOString(),
     }
 
-    const axios = await import("axios")
-
-    const testMetadata = {
-      name: "Test NFT",
-      description: "This is a test NFT for Pinata connection",
-      image: "https://via.placeholder.com/500x500.png?text=Test+NFT",
-      attributes: [
-        {
-          trait_type: "Test",
-          value: "True",
-        },
-      ],
-    }
-
-    console.log("🧪 Testing Pinata connection...")
-
-    const response = await axios.default.post(
-      "https://api.pinata.cloud/pinning/pinJSONToIPFS",
-      {
-        pinataContent: testMetadata,
-        pinataMetadata: {
-          name: `test-metadata-${Date.now()}.json`,
-        },
+    const response = await axios.post("https://api.pinata.cloud/pinning/pinJSONToIPFS", testData, {
+      headers: {
+        "Content-Type": "application/json",
+        pinata_api_key: PINATA_API_KEY,
+        pinata_secret_api_key: PINATA_SECRET_KEY,
       },
-      {
-        headers: {
-          pinata_api_key: process.env.PINATA_API_KEY,
-          pinata_secret_api_key: process.env.PINATA_SECRET_KEY,
-        },
-        timeout: 30000,
-      },
-    )
+    })
 
-    const metadataUrl = `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`
+    const ipfsUrl = `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`
 
     res.status(200).json({
       success: true,
       message: "Pinata connection successful",
       data: {
         ipfsHash: response.data.IpfsHash,
-        metadataUrl: metadataUrl,
-        timestamp: response.data.Timestamp,
+        ipfsUrl,
+        pinataResponse: response.data,
       },
     })
   } catch (error) {
-    console.error("❌ Pinata test error:", error)
+    console.error("Pinata test error:", error.response?.data || error.message)
+
     res.status(500).json({
       success: false,
-      error: "Pinata test failed",
-      message: error.message,
+      error: "Pinata connection failed",
+      message: error.response?.data?.error || error.message,
+      details: error.response?.data || error.stack,
     })
   }
 }
