@@ -1,18 +1,9 @@
-import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
-import { mplCore, createV1 } from "@metaplex-foundation/mpl-core"
-import { createSignerFromKeypair, signerIdentity, generateSigner } from "@metaplex-foundation/umi"
-import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
-import { Keypair } from "@solana/web3.js"
-import bs58 from "bs58"
-import axios from "axios"
-
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-  // Handle preflight requests
   if (req.method === "OPTIONS") {
     res.status(200).end()
     return
@@ -27,15 +18,27 @@ export default async function handler(req, res) {
 
     if (!name || !description || !image || !recipient) {
       return res.status(400).json({
-        error: "Missing required fields: name, description, image, recipient",
+        error: "Missing required fields",
+        required: ["name", "description", "image", "recipient"],
       })
     }
 
-    // Initialize Umi
-    const umi = createUmi(process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com").use(mplCore())
+    // Dynamic imports to reduce cold start time
+    const { createUmi } = await import("@metaplex-foundation/umi-bundle-defaults")
+    const { mplCore, createV1, ruleSet } = await import("@metaplex-foundation/mpl-core")
+    const { createSignerFromKeypair, signerIdentity, generateSigner, publicKey } = await import(
+      "@metaplex-foundation/umi"
+    )
+    const { fromWeb3JsKeypair } = await import("@metaplex-foundation/umi-web3js-adapters")
+    const { Keypair } = await import("@solana/web3.js")
+    const bs58 = await import("bs58")
+    const axios = await import("axios")
 
-    // Create creator keypair from private key
-    const creatorKeypair = Keypair.fromSecretKey(bs58.decode(process.env.CREATOR_PRIVATE_KEY))
+    // Initialize UMI
+    const umi = createUmi(process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com").use(mplCore())
+
+    // Load creator keypair
+    const creatorKeypair = Keypair.fromSecretKey(bs58.default.decode(process.env.CREATOR_PRIVATE_KEY))
     const creatorSigner = createSignerFromKeypair(umi, fromWeb3JsKeypair(creatorKeypair))
     umi.use(signerIdentity(creatorSigner))
 
@@ -51,7 +54,7 @@ export default async function handler(req, res) {
       },
     }
 
-    const pinataResponse = await axios.post("https://api.pinata.cloud/pinning/pinJSONToIPFS", metadata, {
+    const pinataResponse = await axios.default.post("https://api.pinata.cloud/pinning/pinJSONToIPFS", metadata, {
       headers: {
         "Content-Type": "application/json",
         pinata_api_key: process.env.PINATA_API_KEY,
@@ -64,33 +67,42 @@ export default async function handler(req, res) {
     // Generate asset keypair
     const asset = generateSigner(umi)
 
-    // Create the NFT
+    // Create NFT
     const tx = await createV1(umi, {
       asset,
       name,
       uri: metadataUri,
-      owner: recipient,
-      authority: creatorSigner,
-      collection: null,
-      plugins: [],
+      owner: publicKey(recipient),
+      plugins: [
+        {
+          type: "Royalties",
+          basisPoints: 500, // 5%
+          creators: [
+            {
+              address: creatorSigner.publicKey,
+              percentage: 100,
+            },
+          ],
+          ruleSet: ruleSet("None"),
+        },
+      ],
     }).sendAndConfirm(umi)
+
+    const signature = bs58.default.encode(tx.signature)
 
     res.status(200).json({
       success: true,
-      message: "NFT minted successfully",
-      data: {
-        signature: bs58.encode(tx.signature),
-        asset: asset.publicKey,
-        metadataUri,
-        recipient,
-      },
+      signature,
+      asset: asset.publicKey,
+      metadataUri,
+      explorer: `https://explorer.solana.com/tx/${signature}?cluster=${process.env.SOLANA_NETWORK === "mainnet-beta" ? "mainnet" : "devnet"}`,
     })
   } catch (error) {
     console.error("Minting error:", error)
     res.status(500).json({
-      success: false,
-      error: "Failed to mint NFT",
-      details: error.message,
+      error: "Minting failed",
+      message: error.message,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     })
   }
 }
