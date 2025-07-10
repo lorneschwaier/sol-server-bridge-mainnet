@@ -1,62 +1,69 @@
-const { Connection } = require("@solana/web3.js")
+const { Connection, PublicKey, Keypair, clusterApiUrl } = require("@solana/web3.js")
+const { createUmi } = require("@metaplex-foundation/umi-bundle-defaults")
+const { mplCore } = require("@metaplex-foundation/mpl-core")
+const { keypairIdentity } = require("@metaplex-foundation/umi")
+const { fromWeb3JsKeypair } = require("@metaplex-foundation/umi-web3js-adapters")
+const bs58 = require("bs58")
 
-// CORS headers
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-  "Access-Control-Max-Age": "86400",
-}
+// Environment variables
+const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
+const SOLANA_RPC_URL =
+  process.env.SOLANA_RPC_URL ||
+  (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
+const PINATA_API_KEY = process.env.PINATA_API_KEY
+const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
+const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
 
-module.exports = async (req, res) => {
-  // Handle preflight requests
-  if (req.method === "OPTIONS") {
-    return res.status(200).json({ message: "OK" })
-  }
+// Initialize Solana connection
+const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
-  // Set CORS headers
-  Object.keys(corsHeaders).forEach((key) => {
-    res.setHeader(key, corsHeaders[key])
-  })
+// Initialize creator keypair and UMI
+let creatorKeypair = null
+let creatorUmi = null
 
+if (CREATOR_PRIVATE_KEY) {
   try {
-    const rpcUrl = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
-    const connection = new Connection(rpcUrl, "confirmed")
+    console.log("🔑 Loading creator wallet...")
 
-    // Get current slot to verify connection
-    const slot = await connection.getSlot()
-
-    // Check environment variables
-    const requiredVars = ["CREATOR_PRIVATE_KEY"]
-    const optionalVars = ["SOLANA_RPC_URL", "PINATA_API_KEY", "PINATA_SECRET_KEY"]
-
-    const envCheck = {
-      required: requiredVars.every((varName) => process.env[varName]),
-      optional: optionalVars.filter((varName) => process.env[varName]).length,
+    // Parse private key (handle both JSON array and base58 formats)
+    let privateKeyArray
+    if (CREATOR_PRIVATE_KEY.startsWith("[")) {
+      privateKeyArray = JSON.parse(CREATOR_PRIVATE_KEY)
+    } else {
+      privateKeyArray = Array.from(bs58.decode(CREATOR_PRIVATE_KEY))
     }
 
-    return res.status(200).json({
-      success: true,
-      status: "healthy",
-      network: "mainnet-beta",
-      timestamp: new Date().toISOString(),
-      message: "Bridge server is working!",
-      solana_slot: slot,
-      creator_wallet: process.env.CREATOR_WALLET || "Not configured",
-      environment_check: envCheck.required ? "passed" : "failed",
-      required_vars: envCheck.required ? "✅ All required variables present" : "❌ Missing required variables",
-      optional_vars: `✅ ${envCheck.optional}/${optionalVars.length} optional variables present`,
-      rpc_url: rpcUrl,
-      final_fix_applied: "July 9, 2025 - CORS and endpoints corrected",
-    })
-  } catch (error) {
-    console.error("❌ Health check failed:", error)
+    // Create Web3.js keypair
+    creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
+    console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
 
-    return res.status(500).json({
-      success: false,
-      status: "unhealthy",
-      error: error.message,
-      timestamp: new Date().toISOString(),
-    })
+    // Initialize UMI with Metaplex Core
+    const umi = createUmi(SOLANA_RPC_URL).use(mplCore())
+
+    // Convert Web3.js keypair to UMI keypair
+    const umiKeypair = fromWeb3JsKeypair(creatorKeypair)
+    creatorUmi = umi.use(keypairIdentity(umiKeypair))
+
+    console.log("⚡ Metaplex Core UMI initialized successfully")
+  } catch (error) {
+    console.error("❌ Error loading creator keypair:", error.message)
   }
+} else {
+  console.warn("⚠️ CREATOR_PRIVATE_KEY not provided - running in simulation mode")
+}
+
+export default function handler(req, res) {
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    network: SOLANA_NETWORK,
+    rpcUrl: SOLANA_RPC_URL,
+    mode: creatorUmi ? "real_minting_core" : "simulation",
+    environment: {
+      pinataConfigured: !!(PINATA_API_KEY && PINATA_SECRET_KEY),
+      creatorKeyConfigured: !!CREATOR_PRIVATE_KEY,
+      creatorWalletLoaded: !!creatorKeypair,
+      metaplexCoreReady: !!creatorUmi,
+    },
+  })
 }
