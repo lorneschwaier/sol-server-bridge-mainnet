@@ -8,12 +8,48 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
+      "src": "/api/mint-nft",
+      "methods": ["POST", "OPTIONS"],
+      "dest": "/api/mint-nft.js"
     },
     {
-      "src": "/(.*)",
-      "dest": "/api/$1"
+      "src": "/api/blockhash",
+      "methods": ["POST", "OPTIONS"],
+      "dest": "/api/blockhash.js"
+    },
+    {
+      "src": "/api/send-tx",
+      "methods": ["POST", "OPTIONS"],
+      "dest": "/api/send-tx.js"
+    },
+    {
+      "src": "/api/health",
+      "methods": ["GET", "OPTIONS"],
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/mint-nft",
+      "methods": ["POST", "OPTIONS"],
+      "dest": "/api/mint-nft.js"
+    },
+    {
+      "src": "/blockhash",
+      "methods": ["POST", "OPTIONS"],
+      "dest": "/api/blockhash.js"
+    },
+    {
+      "src": "/send-tx",
+      "methods": ["POST", "OPTIONS"],
+      "dest": "/api/send-tx.js"
+    },
+    {
+      "src": "/health",
+      "methods": ["GET", "OPTIONS"],
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/.*",
+      "dest": "/api/health.js"
     }
   ],
   "functions": {
