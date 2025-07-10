@@ -10,23 +10,14 @@ export default async function handler(req, res) {
 
   try {
     const { Connection, clusterApiUrl } = await import("@solana/web3.js")
-
-    const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
-    const SOLANA_RPC_URL =
-      process.env.SOLANA_RPC_URL ||
-      (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
-
-    const connection = new Connection(SOLANA_RPC_URL, "confirmed")
+    const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed")
     const { blockhash } = await connection.getLatestBlockhash()
 
     res.status(200).json({
       success: true,
       blockhash: blockhash,
-      network: SOLANA_NETWORK,
-      timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error("Blockhash error:", error)
     res.status(500).json({
       success: false,
       error: error.message,
