@@ -1,33 +1,23 @@
 export default function handler(req, res) {
-  // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 
   if (req.method === "OPTIONS") {
     res.status(200).end()
     return
   }
 
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" })
-  }
-
-  try {
-    const healthData = {
-      status: "healthy",
-      timestamp: new Date().toISOString(),
-      service: "Solana NFT Bridge",
-      version: "1.0.0",
-      environment: process.env.NODE_ENV || "development",
-    }
-
-    res.status(200).json(healthData)
-  } catch (error) {
-    console.error("Health check error:", error)
-    res.status(500).json({
-      error: "Health check failed",
-      message: error.message,
-    })
-  }
+  res.status(200).json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    message: "Solana NFT Bridge is running",
+    environment: {
+      nodeVersion: process.version,
+      platform: process.platform,
+      solanaNetwork: process.env.SOLANA_NETWORK || "mainnet-beta",
+      pinataConfigured: !!(process.env.PINATA_API_KEY && process.env.PINATA_SECRET_KEY),
+      creatorKeyConfigured: !!process.env.CREATOR_PRIVATE_KEY,
+    },
+  })
 }
