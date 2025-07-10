@@ -4,6 +4,5 @@
     "api/*.js": {
       "maxDuration": 30
     }
-  },
-  "buildCommand": "echo 'No build required for serverless functions'"
+  }
 }
