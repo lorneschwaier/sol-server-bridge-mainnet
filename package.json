@@ -1,23 +1,14 @@
 {
-  "name": "solana-nft-bridge",
+  "name": "solana-bridge-server",
   "version": "1.0.0",
-  "description": "Solana NFT minting bridge server",
-  "main": "index.js",
-  "scripts": {
-    "dev": "vercel dev",
-    "build": "echo 'No build step required'",
-    "start": "echo 'Use vercel dev for local development'"
-  },
+  "type": "module",
   "dependencies": {
     "@metaplex-foundation/mpl-core": "^1.1.1",
     "@metaplex-foundation/umi": "^0.9.2",
     "@metaplex-foundation/umi-bundle-defaults": "^0.9.2",
-    "@metaplex-foundation/umi-web3js-adapters": "^0.9.2",
     "@solana/web3.js": "^1.95.4",
     "axios": "^1.7.7",
-    "bs58": "^6.0.0"
-  },
-  "keywords": ["solana", "nft", "metaplex", "vercel"],
-  "author": "Your Name",
-  "license": "MIT"
+    "cors": "^2.8.5",
+    "express": "^4.21.1"
+  }
 }
