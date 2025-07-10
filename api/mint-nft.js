@@ -1,8 +1,113 @@
+const { Connection, PublicKey, Keypair, clusterApiUrl } = require("@solana/web3.js")
+const { createUmi } = require("@metaplex-foundation/umi-bundle-defaults")
+const { mplCore, createV1, ruleSet } = require("@metaplex-foundation/mpl-core")
+const { keypairIdentity, generateSigner, percentAmount } = require("@metaplex-foundation/umi")
+const { fromWeb3JsKeypair } = require("@metaplex-foundation/umi-web3js-adapters")
+const bs58 = require("bs58")
+const axios = require("axios")
+
+// Environment variables
+const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
+const SOLANA_RPC_URL =
+  process.env.SOLANA_RPC_URL ||
+  (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
+const PINATA_API_KEY = process.env.PINATA_API_KEY
+const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
+const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
+
+// Initialize Solana connection
+const connection = new Connection(SOLANA_RPC_URL, "confirmed")
+
+// Initialize creator keypair and UMI
+let creatorKeypair = null
+let creatorUmi = null
+
+if (CREATOR_PRIVATE_KEY) {
+  try {
+    console.log("🔑 Loading creator wallet...")
+
+    // Parse private key (handle both JSON array and base58 formats)
+    let privateKeyArray
+    if (CREATOR_PRIVATE_KEY.startsWith("[")) {
+      privateKeyArray = JSON.parse(CREATOR_PRIVATE_KEY)
+    } else {
+      privateKeyArray = Array.from(bs58.decode(CREATOR_PRIVATE_KEY))
+    }
+
+    // Create Web3.js keypair
+    creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
+    console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
+
+    // Initialize UMI with Metaplex Core
+    const umi = createUmi(SOLANA_RPC_URL).use(mplCore())
+
+    // Convert Web3.js keypair to UMI keypair
+    const umiKeypair = fromWeb3JsKeypair(creatorKeypair)
+    creatorUmi = umi.use(keypairIdentity(umiKeypair))
+
+    console.log("⚡ Metaplex Core UMI initialized successfully")
+  } catch (error) {
+    console.error("❌ Error loading creator keypair:", error.message)
+  }
+} else {
+  console.warn("⚠️ CREATOR_PRIVATE_KEY not provided - running in simulation mode")
+}
+
+// Upload to IPFS via Pinata
+async function uploadToPinata(imageBuffer, metadata) {
+  if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
+    throw new Error("Pinata API credentials not configured")
+  }
+
+  try {
+    // Upload image first
+    const imageFormData = new FormData()
+    const imageBlob = new Blob([imageBuffer], { type: "image/png" })
+    imageFormData.append("file", imageBlob, "nft-image.png")
+
+    const imageResponse = await axios.post("https://api.pinata.cloud/pinning/pinFileToIPFS", imageFormData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+        pinata_api_key: PINATA_API_KEY,
+        pinata_secret_api_key: PINATA_SECRET_KEY,
+      },
+    })
+
+    const imageUri = `https://gateway.pinata.cloud/ipfs/${imageResponse.data.IpfsHash}`
+    console.log("📸 Image uploaded to IPFS:", imageUri)
+
+    // Create metadata with image URI
+    const fullMetadata = {
+      ...metadata,
+      image: imageUri,
+    }
+
+    // Upload metadata
+    const metadataResponse = await axios.post("https://api.pinata.cloud/pinning/pinJSONToIPFS", fullMetadata, {
+      headers: {
+        "Content-Type": "application/json",
+        pinata_api_key: PINATA_API_KEY,
+        pinata_secret_api_key: PINATA_SECRET_KEY,
+      },
+    })
+
+    const metadataUri = `https://gateway.pinata.cloud/ipfs/${metadataResponse.data.IpfsHash}`
+    console.log("📄 Metadata uploaded to IPFS:", metadataUri)
+
+    return { imageUri, metadataUri }
+  } catch (error) {
+    console.error("❌ Pinata upload error:", error.response?.data || error.message)
+    throw new Error(`Failed to upload to IPFS: ${error.message}`)
+  }
+}
+
 export default async function handler(req, res) {
+  // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
+  // Handle preflight requests
   if (req.method === "OPTIONS") {
     res.status(200).end()
     return
@@ -13,169 +118,139 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { walletAddress, metadata } = req.body
+    const { name, description, image, attributes, recipientAddress } = req.body
 
-    if (!walletAddress || !metadata) {
+    // Validate required fields
+    if (!name || !description || !image || !recipientAddress) {
       return res.status(400).json({
-        success: false,
-        error: "Missing required fields: walletAddress and metadata",
+        error: "Missing required fields",
+        required: ["name", "description", "image", "recipientAddress"],
       })
     }
 
-    // Check environment variables
-    if (!process.env.CREATOR_PRIVATE_KEY) {
-      return res.status(500).json({
-        success: false,
-        error: "CREATOR_PRIVATE_KEY not configured",
-      })
-    }
-
-    if (!process.env.PINATA_API_KEY || !process.env.PINATA_SECRET_KEY) {
-      return res.status(500).json({
-        success: false,
-        error: "Pinata API credentials not configured",
-      })
-    }
-
-    // Dynamic imports to avoid cold start issues
-    const { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } = await import("@solana/web3.js")
-    const { createUmi } = await import("@metaplex-foundation/umi-bundle-defaults")
-    const { createV1, mplCore } = await import("@metaplex-foundation/mpl-core")
-    const { keypairIdentity, generateSigner, publicKey, some, none } = await import("@metaplex-foundation/umi")
-    const { fromWeb3JsKeypair } = await import("@metaplex-foundation/umi-web3js-adapters")
-    const axios = await import("axios")
-    const bs58 = await import("bs58")
-
-    // Environment variables
-    const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
-    const SOLANA_RPC_URL =
-      process.env.SOLANA_RPC_URL ||
-      (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
-
-    console.log("🎨 === NFT MINTING REQUEST ===")
-    console.log("👤 Wallet:", walletAddress)
-    console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
-
-    // Validate wallet address
+    // Validate recipient address
+    let recipientPublicKey
     try {
-      new PublicKey(walletAddress)
+      recipientPublicKey = new PublicKey(recipientAddress)
     } catch (error) {
       return res.status(400).json({
-        success: false,
-        error: "Invalid wallet address format",
+        error: "Invalid recipient address",
+        message: error.message,
       })
     }
 
-    // Step 1: Upload metadata to Pinata
-    console.log("📤 Step 1: Uploading metadata...")
-
-    const pinataResponse = await axios.default.post(
-      "https://api.pinata.cloud/pinning/pinJSONToIPFS",
-      {
-        pinataContent: metadata,
-        pinataMetadata: {
-          name: `nft-metadata-${Date.now()}.json`,
+    // Check if we're in simulation mode
+    if (!creatorUmi) {
+      return res.status(200).json({
+        success: true,
+        simulation: true,
+        message: "NFT minting simulated (no private key configured)",
+        data: {
+          name,
+          description,
+          recipientAddress,
+          network: SOLANA_NETWORK,
+          timestamp: new Date().toISOString(),
         },
-      },
-      {
-        headers: {
-          pinata_api_key: process.env.PINATA_API_KEY,
-          pinata_secret_api_key: process.env.PINATA_SECRET_KEY,
-        },
-        timeout: 30000,
-      },
-    )
+      })
+    }
 
-    const metadataUrl = `https://gateway.pinata.cloud/ipfs/${pinataResponse.data.IpfsHash}`
-    console.log("✅ Metadata uploaded to Pinata:", metadataUrl)
-
-    // Step 2: Initialize Solana connection and mint NFT
-    console.log("⚡ Step 2: Minting NFT...")
-
-    const connection = new Connection(SOLANA_RPC_URL, "confirmed")
-
-    // Parse private key
-    let privateKeyArray
-    if (process.env.CREATOR_PRIVATE_KEY.startsWith("[")) {
-      privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY)
+    // Convert image from base64 if needed
+    let imageBuffer
+    if (image.startsWith("data:image/")) {
+      const base64Data = image.split(",")[1]
+      imageBuffer = Buffer.from(base64Data, "base64")
+    } else if (image.startsWith("http")) {
+      // Download image from URL
+      const imageResponse = await axios.get(image, { responseType: "arraybuffer" })
+      imageBuffer = Buffer.from(imageResponse.data)
     } else {
-      privateKeyArray = Array.from(bs58.default.decode(process.env.CREATOR_PRIVATE_KEY))
+      return res.status(400).json({
+        error: "Invalid image format",
+        message: "Image must be base64 data URL or HTTP URL",
+      })
     }
 
-    // Create Web3.js keypair
-    const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
-    console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
-
-    // Check creator wallet balance
-    const balance = await connection.getBalance(creatorKeypair.publicKey)
-    console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
-
-    if (balance < 0.01 * LAMPORTS_PER_SOL) {
-      throw new Error(
-        `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet.`,
-      )
+    // Prepare metadata
+    const metadata = {
+      name,
+      description,
+      attributes: attributes || [],
+      properties: {
+        files: [
+          {
+            uri: "", // Will be filled after upload
+            type: "image/png",
+          },
+        ],
+        category: "image",
+      },
     }
 
-    // Initialize UMI with Metaplex Core
-    const umi = createUmi(SOLANA_RPC_URL).use(mplCore())
-    const umiKeypair = fromWeb3JsKeypair(creatorKeypair)
-    const creatorUmi = umi.use(keypairIdentity(umiKeypair))
+    // Upload to IPFS
+    console.log("📤 Uploading to IPFS...")
+    const { imageUri, metadataUri } = await uploadToPinata(imageBuffer, metadata)
 
-    // Generate asset signer
+    // Generate asset keypair
     const asset = generateSigner(creatorUmi)
-    console.log("🔑 Generated asset address:", asset.publicKey)
 
-    // Prepare collection (if provided)
-    let collectionConfig = none()
-    if (metadata.collection && metadata.collection.trim()) {
-      try {
-        const collectionPubkey = publicKey(metadata.collection.trim())
-        collectionConfig = some({ key: collectionPubkey, verified: false })
-        console.log("📁 Collection configured:", metadata.collection)
-      } catch (error) {
-        console.log("⚠️ Invalid collection address, proceeding without collection")
-      }
-    }
-
-    console.log("⚡ Creating NFT with Metaplex Core...")
+    console.log("🎨 Minting NFT with Metaplex Core...")
+    console.log("Asset address:", asset.publicKey.toString())
+    console.log("Recipient:", recipientAddress)
 
     // Create the NFT using Metaplex Core
-    const createInstruction = createV1(creatorUmi, {
+    const createResult = await createV1(creatorUmi, {
       asset,
-      name: metadata.name || "Unnamed NFT",
-      uri: metadataUrl,
-      collection: collectionConfig,
-    })
+      name,
+      uri: metadataUri,
+      owner: recipientPublicKey.toString(),
+      plugins: [
+        {
+          type: "Royalties",
+          basisPoints: 500, // 5% royalties
+          creators: [
+            {
+              address: creatorKeypair.publicKey.toString(),
+              percentage: 100,
+            },
+          ],
+          ruleSet: ruleSet("None"),
+        },
+      ],
+    }).sendAndConfirm(creatorUmi)
 
-    // Execute the transaction
-    console.log("📡 Submitting transaction to Solana...")
-    const result = await createInstruction.sendAndConfirm(creatorUmi, {
-      confirm: { commitment: "confirmed" },
-      send: { skipPreflight: false },
-    })
+    console.log("✅ NFT minted successfully!")
+    console.log("Transaction signature:", createResult.signature)
 
-    console.log("🎉 === NFT MINTED SUCCESSFULLY! ===")
-    console.log("🔗 Asset address:", asset.publicKey)
-    console.log("📝 Transaction signature:", result.signature)
-
-    const explorerUrl = `https://explorer.solana.com/address/${asset.publicKey}${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`
-
+    // Return success response
     res.status(200).json({
       success: true,
-      mintAddress: asset.publicKey,
-      transactionSignature: result.signature,
-      metadataUrl: metadataUrl,
-      explorerUrl: explorerUrl,
-      network: SOLANA_NETWORK,
-      method: "metaplex_core",
-      message: "NFT minted successfully on Solana with Metaplex Core!",
+      message: "NFT minted successfully",
+      data: {
+        assetId: asset.publicKey.toString(),
+        transactionSignature: createResult.signature,
+        name,
+        description,
+        imageUri,
+        metadataUri,
+        recipientAddress,
+        network: SOLANA_NETWORK,
+        explorerUrl: `https://explorer.solana.com/address/${asset.publicKey.toString()}${
+          SOLANA_NETWORK !== "mainnet-beta" ? `?cluster=${SOLANA_NETWORK}` : ""
+        }`,
+        timestamp: new Date().toISOString(),
+      },
     })
   } catch (error) {
-    console.error("❌ Mint NFT error:", error)
+    console.error("❌ NFT minting error:", error)
+
+    // Return detailed error information
     res.status(500).json({
       success: false,
-      error: error.message,
-      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      error: "NFT minting failed",
+      message: error.message,
+      details: error.stack,
+      timestamp: new Date().toISOString(),
     })
   }
 }
