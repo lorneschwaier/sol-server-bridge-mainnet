@@ -1,58 +1,90 @@
-import { Connection, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import { Connection, Transaction, PublicKey, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js"
 
-const RPC_URL = process.env.SOLANA_RPC_URL;
-const CREATOR_WALLET = process.env.CREATOR_WALLET; // Your destination wallet address
+const RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+  "Access-Control-Max-Age": "86400",
+}
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  // Handle preflight requests
+  if (req.method === "OPTIONS") {
+    return res.status(200).json({ message: "OK" })
+  }
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+  // Set CORS headers
+  Object.keys(corsHeaders).forEach((key) => {
+    res.setHeader(key, corsHeaders[key])
+  })
 
   if (req.method !== "POST") {
-    return res.status(405).json({ success: false, error: "Method not allowed" });
+    return res.status(405).json({ success: false, error: "Method not allowed" })
   }
 
   try {
-    const { walletAddress, amount, productId } = req.body;
+    const { fromPubkey, toPubkey, amount } = req.body
 
-    if (!walletAddress || !amount || !productId) {
-      return res.status(400).json({ success: false, error: "Missing required parameters" });
+    console.log("💰 Creating payment transaction...")
+    console.log("From:", fromPubkey)
+    console.log("To:", toPubkey)
+    console.log("Amount:", amount, "SOL")
+
+    if (!fromPubkey || !toPubkey || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields: fromPubkey, toPubkey, amount",
+      })
     }
 
-    const connection = new Connection(RPC_URL, "confirmed");
-    const fromPubkey = new PublicKey(walletAddress);
-    const toPubkey = new PublicKey(CREATOR_WALLET);
+    // Use environment RPC URL or default to mainnet
+    const rpcUrl = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
+    const connection = new Connection(rpcUrl, "confirmed")
+
+    // Convert amount to lamports
+    const lamports = Math.floor(Number.parseFloat(amount) * LAMPORTS_PER_SOL)
 
     // Create transaction
-    const blockhash = await connection.getLatestBlockhash();
-    const tx = new Transaction({
-      recentBlockhash: blockhash.blockhash,
-      feePayer: fromPubkey,
-    }).add(
+    const transaction = new Transaction()
+
+    // Add transfer instruction
+    transaction.add(
       SystemProgram.transfer({
-        fromPubkey,
-        toPubkey,
-        lamports: Math.round(amount * 1e9), // convert SOL to lamports
-      })
-    );
+        fromPubkey: new PublicKey(fromPubkey),
+        toPubkey: new PublicKey(toPubkey),
+        lamports: lamports,
+      }),
+    )
 
-    // Serialize to base64 for frontend signing
-    const serialized = tx.serialize({
-      requireAllSignatures: false, // so Phantom can sign it
+    // Get latest blockhash
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed")
+    transaction.recentBlockhash = blockhash
+    transaction.feePayer = new PublicKey(fromPubkey)
+
+    // Serialize transaction for signing
+    const serializedTransaction = transaction.serialize({
+      requireAllSignatures: false,
       verifySignatures: false,
-    });
+    })
 
-    const base64Tx = serialized.toString("base64");
+    console.log("✅ Transaction created successfully")
 
     return res.status(200).json({
       success: true,
-      transaction: base64Tx,
-      message: "🔗 Transaction created successfully",
-    });
-  } catch (err) {
-    console.error("❌ Transaction creation error:", err);
-    return res.status(500).json({ success: false, error: err.message });
+      transaction: serializedTransaction.toString("base64"),
+      blockhash: blockhash,
+      lastValidBlockHeight: lastValidBlockHeight,
+      message: "Transaction ready for signing",
+    })
+  } catch (error) {
+    console.error("❌ Send transaction error:", error)
+
+    return res.status(500).json({
+      success: false,
+      error: "Failed to create transaction",
+      details: error.message,
+    })
   }
 }
