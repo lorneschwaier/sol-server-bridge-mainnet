@@ -15,30 +15,36 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { Connection, clusterApiUrl } = await import("@solana/web3.js")
+    const { signedTransaction } = req.body
 
-    const { serializedTransaction } = req.body
-
-    if (!serializedTransaction) {
+    if (!signedTransaction) {
       return res.status(400).json({
         success: false,
-        error: "Missing serializedTransaction",
+        error: "Missing signedTransaction",
       })
     }
 
+    // Dynamic imports
+    const { Connection, Transaction, clusterApiUrl } = await import("@solana/web3.js")
+
+    // Environment variables
     const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
     const SOLANA_RPC_URL =
       process.env.SOLANA_RPC_URL ||
       (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
 
+    console.log("📡 Sending transaction to Solana...")
+
     const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
     // Deserialize and send transaction
-    const transaction = Buffer.from(serializedTransaction, "base64")
-    const signature = await connection.sendRawTransaction(transaction, {
+    const transaction = Transaction.from(Buffer.from(signedTransaction, "base64"))
+    const signature = await connection.sendRawTransaction(transaction.serialize(), {
       skipPreflight: false,
       preflightCommitment: "confirmed",
     })
+
+    console.log("✅ Transaction sent:", signature)
 
     // Wait for confirmation
     const confirmation = await connection.confirmTransaction(signature, "confirmed")
@@ -47,13 +53,19 @@ export default async function handler(req, res) {
       throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`)
     }
 
+    console.log("🎉 Transaction confirmed!")
+
+    const explorerUrl = `https://explorer.solana.com/tx/${signature}${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`
+
     res.status(200).json({
       success: true,
       signature: signature,
-      message: "Transaction sent successfully",
+      explorerUrl: explorerUrl,
+      network: SOLANA_NETWORK,
+      message: "Transaction sent and confirmed successfully!",
     })
   } catch (error) {
-    console.error("Send transaction error:", error)
+    console.error("❌ Send transaction error:", error)
     res.status(500).json({
       success: false,
       error: error.message,
