@@ -1,19 +1,20 @@
 {
-  "name": "solana-bridge-server",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
+  "version": 2,
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 30
+    }
   },
-  "dependencies": {
-    "@metaplex-foundation/mpl-core": "^1.1.1",
-    "@metaplex-foundation/umi": "^0.9.2",
-    "@metaplex-foundation/umi-bundle-defaults": "^0.9.2",
-    "@metaplex-foundation/umi-web3js-adapters": "^0.9.2",
-    "@solana/web3.js": "^1.95.4",
-    "axios": "^1.7.7",
-    "bs58": "^6.0.0",
-    "cors": "^2.8.5",
-    "express": "^4.21.1"
-  }
+  "builds": [
+    {
+      "src": "index.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.js"
+    }
+  ]
 }
