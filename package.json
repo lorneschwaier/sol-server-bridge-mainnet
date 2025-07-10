@@ -1,8 +1,8 @@
 {
-  "name": "solana-nft-bridge-api",
+  "name": "solana-nft-bridge",
   "version": "1.0.0",
-  "description": "Solana NFT Bridge API for WordPress",
-  "main": "api/health.js",
+  "description": "Solana NFT minting bridge server",
+  "main": "index.js",
   "scripts": {
     "dev": "vercel dev",
     "build": "echo 'No build step required'",
@@ -13,14 +13,11 @@
     "@metaplex-foundation/umi": "^0.9.2",
     "@metaplex-foundation/umi-bundle-defaults": "^0.9.2",
     "@metaplex-foundation/umi-web3js-adapters": "^0.9.2",
-    "@solana/web3.js": "^1.95.2",
+    "@solana/web3.js": "^1.95.4",
     "axios": "^1.7.7",
     "bs58": "^6.0.0"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "keywords": ["solana", "nft", "metaplex", "wordpress", "bridge", "api"],
-  "author": "Lorne Schwaier",
+  "keywords": ["solana", "nft", "metaplex", "vercel"],
+  "author": "Your Name",
   "license": "MIT"
 }
