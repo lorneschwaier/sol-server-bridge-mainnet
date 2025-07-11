@@ -15,13 +15,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Fix Buffer issues in serverless environment
-    if (typeof global.Buffer === "undefined") {
-      global.Buffer = require("buffer").Buffer
-    }
-
-    const { Connection, Transaction, clusterApiUrl } = await import("@solana/web3.js")
-
     const { signedTx } = req.body
 
     if (!signedTx) {
@@ -31,43 +24,35 @@ export default async function handler(req, res) {
       })
     }
 
+    // Dynamic imports
+    const { Connection, clusterApiUrl } = await import("@solana/web3.js")
+
     // Environment variables
     const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
     const SOLANA_RPC_URL =
       process.env.SOLANA_RPC_URL ||
       (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
 
-    const connection = new Connection(SOLANA_RPC_URL, "confirmed")
-
     console.log("📡 Sending transaction to Solana...")
 
-    // Deserialize the transaction from base64
-    const transactionBuffer = Buffer.from(signedTx, "base64")
-    const transaction = Transaction.from(transactionBuffer)
+    const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
-    // Send the transaction
-    const signature = await connection.sendRawTransaction(transaction.serialize(), {
+    // Send the raw transaction
+    const signature = await connection.sendRawTransaction(Buffer.from(signedTx, "base64"), {
       skipPreflight: false,
-      preflightCommitment: "confirmed",
+      preflightCommitment: "processed",
+      maxRetries: 3,
     })
 
-    console.log("✅ Transaction sent successfully:", signature)
+    console.log("✅ Transaction sent:", signature)
 
-    // Wait for confirmation
-    const confirmation = await connection.confirmTransaction(signature, "confirmed")
-
-    if (confirmation.value.err) {
-      throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`)
-    }
-
-    res.json({
+    res.status(200).json({
       success: true,
       signature: signature,
       network: SOLANA_NETWORK,
-      confirmation: confirmation.value,
     })
   } catch (error) {
-    console.error("❌ Send transaction error:", error)
+    console.error("❌ Transaction sending failed:", error)
     res.status(500).json({
       success: false,
       error: error.message,
