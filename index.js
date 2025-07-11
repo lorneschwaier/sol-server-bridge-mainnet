@@ -12,17 +12,7 @@ const app = express()
 const PORT = process.env.PORT || 3000
 
 // CORS configuration - Allow all origins for now
-app.use(
-  cors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-    credentials: false,
-  }),
-)
-
-// Handle preflight requests
-app.options("*", cors())
+app.use(cors())
 
 // Middleware
 app.use(express.json({ limit: "50mb" }))
@@ -39,6 +29,15 @@ const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
 
 // Initialize Solana connection
 const connection = new Connection(SOLANA_RPC_URL, "confirmed")
+
+// Root endpoint
+app.get("/", (req, res) => {
+  res.json({
+    message: "Solana NFT Bridge Server",
+    status: "running",
+    timestamp: new Date().toISOString(),
+  })
+})
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -282,11 +281,7 @@ app.post("/mint-nft", async (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Solana NFT Bridge server running on port ${PORT}`)
-  console.log(`📍 Health check: http://localhost:${PORT}/health`)
-  console.log(`🔗 Blockhash: http://localhost:${PORT}/blockhash`)
-  console.log(`🧪 Test Pinata: http://localhost:${PORT}/test-pinata`)
-  console.log(`🎨 Mint NFT: http://localhost:${PORT}/mint-nft`)
+  console.log(`🚀 Server running on port ${PORT}`)
 })
 
 module.exports = app
