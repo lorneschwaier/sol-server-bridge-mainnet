@@ -1,12 +1,12 @@
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 
+  // Handle preflight requests
   if (req.method === "OPTIONS") {
-    res.status(200).end()
-    return
+    return res.status(200).end()
   }
 
   if (req.method !== "POST") {
@@ -17,6 +17,8 @@ export default async function handler(req, res) {
   }
 
   try {
+    const { Connection, Transaction } = require("@solana/web3.js")
+
     const { signedTx } = req.body
 
     if (!signedTx) {
@@ -26,86 +28,42 @@ export default async function handler(req, res) {
       })
     }
 
-    // Dynamic imports
-    const { Connection, clusterApiUrl, Transaction } = await import("@solana/web3.js")
+    // Create connection to Solana
+    const connection = new Connection(process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com", "confirmed")
 
-    // Environment variables
-    const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
-    const SOLANA_RPC_URL =
-      process.env.SOLANA_RPC_URL ||
-      (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
-
-    console.log("📡 Sending transaction to Solana...")
-
-    const connection = new Connection(SOLANA_RPC_URL, "confirmed")
-
-    // Deserialize the transaction to update blockhash
+    // Deserialize the signed transaction
     const transaction = Transaction.from(Buffer.from(signedTx, "base64"))
 
-    // Get fresh blockhash right before sending
-    console.log("🔄 Getting fresh blockhash before sending...")
-    const { blockhash } = await connection.getLatestBlockhash("confirmed")
+    console.log("📡 Broadcasting transaction to Solana...")
 
-    // Update the transaction with fresh blockhash
-    transaction.recentBlockhash = blockhash
-
-    console.log("✅ Updated transaction with fresh blockhash:", blockhash)
-
-    // Send the transaction with updated blockhash
+    // Send the transaction
     const signature = await connection.sendRawTransaction(transaction.serialize(), {
       skipPreflight: false,
       preflightCommitment: "confirmed",
-      maxRetries: 3,
     })
 
-    console.log("✅ Transaction sent:", signature)
+    console.log("✅ Transaction sent! Signature:", signature)
 
-    // Wait for confirmation with timeout
-    const confirmationPromise = connection.confirmTransaction(
-      {
-        signature,
-        blockhash,
-        lastValidBlockHeight: (await connection.getLatestBlockhash()).lastValidBlockHeight,
-      },
-      "confirmed",
-    )
+    // Wait for confirmation
+    const confirmation = await connection.confirmTransaction(signature, "confirmed")
 
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Confirmation timeout")), 30000),
-    )
-
-    const confirmation = await Promise.race([confirmationPromise, timeoutPromise])
-
-    if (confirmation.value?.err) {
+    if (confirmation.value.err) {
       throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`)
     }
 
-    console.log("✅ Transaction confirmed:", signature)
+    console.log("✅ Transaction confirmed!")
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       signature: signature,
-      confirmation: confirmation.value,
-      network: SOLANA_NETWORK,
-      timestamp: new Date().toISOString(),
+      confirmation: confirmation,
     })
   } catch (error) {
     console.error("❌ Send transaction error:", error)
 
-    let errorMessage = error.message || "Unknown error"
-
-    // Handle specific error types
-    if (errorMessage.includes("Blockhash not found")) {
-      errorMessage = "Transaction failed: Blockhash expired. Please try again."
-    } else if (errorMessage.includes("insufficient funds")) {
-      errorMessage = "Transaction failed: Insufficient SOL balance."
-    } else if (errorMessage.includes("Simulation failed")) {
-      errorMessage = `Transaction failed: Simulation failed. ${error.message}`
-    }
-
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      error: errorMessage,
+      error: error.message || "Failed to send transaction",
     })
   }
 }
