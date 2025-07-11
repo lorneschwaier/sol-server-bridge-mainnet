@@ -17,6 +17,10 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata } = req.body
 
+    console.log("🎨 === NFT MINTING REQUEST ===")
+    console.log("👤 Wallet:", walletAddress)
+    console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
+
     if (!walletAddress || !metadata) {
       return res.status(400).json({
         success: false,
@@ -53,10 +57,6 @@ export default async function handler(req, res) {
     const SOLANA_RPC_URL =
       process.env.SOLANA_RPC_URL ||
       (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
-
-    console.log("🎨 === NFT MINTING REQUEST ===")
-    console.log("👤 Wallet:", walletAddress)
-    console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
 
     // Validate wallet address
     try {
