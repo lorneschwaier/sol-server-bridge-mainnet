@@ -6,18 +6,17 @@
       "maxDuration": 60
     }
   },
-  "env": {
-    "SOLANA_NETWORK": "mainnet-beta",
-    "NODE_ENV": "production"
-  },
-  "headers": [
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type" }
-      ]
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/health"
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
 }
