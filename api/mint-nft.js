@@ -1,8 +1,11 @@
-// Enhanced Buffer polyfill for Vercel serverless environment
+// Proper Buffer polyfill for Vercel serverless environment
 if (typeof global !== "undefined") {
   if (!global.Buffer) {
     const { Buffer } = require("buffer")
     global.Buffer = Buffer
+    global.Buffer.from = Buffer.from
+    global.Buffer.alloc = Buffer.alloc
+    global.Buffer.allocUnsafe = Buffer.allocUnsafe
   }
   if (!global.process) {
     global.process = require("process")
@@ -50,7 +53,7 @@ export default async function handler(req, res) {
       })
     }
 
-    // Dynamic imports with proper error handling
+    // Dynamic imports
     const { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } = await import("@solana/web3.js")
     const { createUmi } = await import("@metaplex-foundation/umi-bundle-defaults")
     const { createV1, mplCore } = await import("@metaplex-foundation/mpl-core")
@@ -106,19 +109,17 @@ export default async function handler(req, res) {
 
     const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
-    // Parse private key with enhanced Buffer handling
+    // Parse private key
     let privateKeyArray
     try {
       if (process.env.CREATOR_PRIVATE_KEY.startsWith("[")) {
         privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY)
       } else {
-        // Use dynamic import for bs58 with proper Buffer handling
         const bs58 = await import("bs58")
         const decoded = bs58.default.decode(process.env.CREATOR_PRIVATE_KEY)
         privateKeyArray = Array.from(decoded)
       }
 
-      // Ensure we have a valid array
       if (!Array.isArray(privateKeyArray) || privateKeyArray.length !== 64) {
         throw new Error("Invalid private key length")
       }
@@ -130,7 +131,7 @@ export default async function handler(req, res) {
       })
     }
 
-    // Create Web3.js keypair with proper Uint8Array
+    // Create Web3.js keypair
     const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
     console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
 
@@ -153,77 +154,60 @@ export default async function handler(req, res) {
     const asset = generateSigner(creatorUmi)
     console.log("🔑 Generated asset address:", asset.publicKey)
 
-    // Prepare collection (if provided)
+    // FIXED: Properly guard collection logic - only call publicKey() with valid strings
     let collectionConfig = none()
-    if (metadata.collection && metadata.collection.trim()) {
+    if (metadata.collection && metadata.collection.trim() !== "") {
       try {
         const collectionPubkey = publicKey(metadata.collection.trim())
-        collectionConfig = some({ key: collectionPubkey, verified: false })
+        collectionConfig = some({
+          key: collectionPubkey,
+          verified: false,
+        })
         console.log("📁 Collection configured:", metadata.collection)
-      } catch (error) {
-        console.log("⚠️ Invalid collection address, proceeding without collection")
+      } catch (err) {
+        console.error("❌ Invalid collection address:", metadata.collection, err)
+        return res.status(400).json({
+          success: false,
+          error: `Invalid collection address: ${metadata.collection}`,
+        })
       }
+    } else {
+      console.log("📁 No collection specified, proceeding without collection")
     }
 
     console.log("⚡ Creating NFT with Metaplex Core...")
 
-    // Create the NFT using Metaplex Core with enhanced error handling
-    try {
-      const createInstruction = createV1(creatorUmi, {
-        asset,
-        name: metadata.name || "Unnamed NFT",
-        uri: metadataUrl,
-        collection: collectionConfig,
-      })
+    // Create the NFT using Metaplex Core - REAL MINT ONLY
+    const createInstruction = createV1(creatorUmi, {
+      asset,
+      name: metadata.name || "Unnamed NFT",
+      uri: metadataUrl,
+      collection: collectionConfig,
+    })
 
-      // Execute the transaction
-      console.log("📡 Submitting transaction to Solana...")
-      const result = await createInstruction.sendAndConfirm(creatorUmi, {
-        confirm: { commitment: "confirmed" },
-        send: { skipPreflight: false },
-      })
+    // Execute the transaction
+    console.log("📡 Submitting transaction to Solana...")
+    const result = await createInstruction.sendAndConfirm(creatorUmi, {
+      confirm: { commitment: "confirmed" },
+      send: { skipPreflight: false },
+    })
 
-      console.log("🎉 === NFT MINTED SUCCESSFULLY! ===")
-      console.log("🔗 Asset address:", asset.publicKey)
-      console.log("📝 Transaction signature:", result.signature)
+    console.log("🎉 === NFT MINTED SUCCESSFULLY! ===")
+    console.log("🔗 Asset address:", asset.publicKey)
+    console.log("📝 Transaction signature:", result.signature)
 
-      const explorerUrl = `https://explorer.solana.com/address/${asset.publicKey}${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`
+    const explorerUrl = `https://explorer.solana.com/address/${asset.publicKey}${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`
 
-      res.status(200).json({
-        success: true,
-        mintAddress: asset.publicKey,
-        transactionSignature: result.signature,
-        metadataUrl: metadataUrl,
-        explorerUrl: explorerUrl,
-        network: SOLANA_NETWORK,
-        method: "metaplex_core",
-        message: "NFT minted successfully on Solana with Metaplex Core!",
-      })
-    } catch (mintError) {
-      console.error("❌ Metaplex Core minting failed:", mintError)
-
-      // If Buffer error, return a demo response to keep the flow working
-      if (mintError.message && mintError.message.includes("buffer.slice")) {
-        console.log("🔄 Buffer error detected, returning demo mint response...")
-
-        const demoMintAddress = `DEMO${Date.now()}${Math.random().toString(36).substr(2, 9)}`
-        const demoTxSignature = `DEMO${Date.now()}${Math.random().toString(36).substr(2, 9)}`
-
-        res.status(200).json({
-          success: true,
-          mintAddress: demoMintAddress,
-          transactionSignature: demoTxSignature,
-          metadataUrl: metadataUrl,
-          explorerUrl: `https://explorer.solana.com/address/${demoMintAddress}`,
-          network: SOLANA_NETWORK,
-          method: "demo_mode",
-          message: "Demo NFT minted - Buffer polyfill issue detected",
-          demo: true,
-        })
-      } else {
-        throw mintError
-      }
-    }
+    res.status(200).json({
+      success: true,
+      mintAddress: asset.publicKey,
+      transactionSignature: result.signature,
+      metadataUrl: metadataUrl,
+      explorerUrl: explorerUrl,
+      network: SOLANA_NETWORK,
+      method: "metaplex_core",
+      message: "NFT minted successfully on Solana with Metaplex Core!",
+    })
   } catch (error) {
     console.error("❌ Mint NFT error:", error)
     res.status(500).json({
