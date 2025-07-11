@@ -2,8 +2,7 @@
   "version": 2,
   "functions": {
     "api/*.js": {
-      "runtime": "nodejs18.x",
-      "maxDuration": 60
+      "runtime": "nodejs18.x"
     }
   },
   "headers": [
@@ -15,9 +14,5 @@
         { "key": "Access-Control-Allow-Headers", "value": "Content-Type" }
       ]
     }
-  ],
-  "env": {
-    "NODE_ENV": "production",
-    "SOLANA_NETWORK": "mainnet-beta"
-  }
+  ]
 }
