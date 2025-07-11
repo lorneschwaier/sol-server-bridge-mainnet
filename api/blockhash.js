@@ -11,11 +11,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Fix Buffer issues in serverless environment
-    if (typeof global.Buffer === "undefined") {
-      global.Buffer = require("buffer").Buffer
-    }
-
+    // Dynamic imports
     const { Connection, clusterApiUrl } = await import("@solana/web3.js")
 
     // Environment variables
@@ -24,14 +20,14 @@ export default async function handler(req, res) {
       process.env.SOLANA_RPC_URL ||
       (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
 
-    const connection = new Connection(SOLANA_RPC_URL, "confirmed")
+    console.log("🔗 Getting latest blockhash...")
 
-    console.log("🔄 Getting latest blockhash...")
+    const connection = new Connection(SOLANA_RPC_URL, "confirmed")
     const { blockhash } = await connection.getLatestBlockhash("confirmed")
 
     console.log("✅ Latest blockhash:", blockhash)
 
-    res.json({
+    res.status(200).json({
       success: true,
       blockhash: blockhash,
       network: SOLANA_NETWORK,
