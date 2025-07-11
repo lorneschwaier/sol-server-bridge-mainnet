@@ -43,14 +43,18 @@ export default async function handler(req, res) {
       })
     }
 
-    // Dynamic imports
+    // Fix Buffer issues in serverless environment
+    if (typeof global.Buffer === "undefined") {
+      global.Buffer = require("buffer").Buffer
+    }
+
+    // Dynamic imports with proper error handling
     const { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } = await import("@solana/web3.js")
     const { createUmi } = await import("@metaplex-foundation/umi-bundle-defaults")
     const { createV1, mplCore } = await import("@metaplex-foundation/mpl-core")
     const { keypairIdentity, generateSigner, publicKey, some, none } = await import("@metaplex-foundation/umi")
     const { fromWeb3JsKeypair } = await import("@metaplex-foundation/umi-web3js-adapters")
     const axios = await import("axios")
-    const bs58 = await import("bs58")
 
     // Environment variables
     const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
@@ -96,15 +100,26 @@ export default async function handler(req, res) {
 
     const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
-    // Parse private key
+    // Parse private key with proper Buffer handling
     let privateKeyArray
-    if (process.env.CREATOR_PRIVATE_KEY.startsWith("[")) {
-      privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY)
-    } else {
-      privateKeyArray = Array.from(bs58.default.decode(process.env.CREATOR_PRIVATE_KEY))
+    try {
+      if (process.env.CREATOR_PRIVATE_KEY.startsWith("[")) {
+        privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY)
+      } else {
+        // Use dynamic import for bs58 to avoid Buffer issues
+        const bs58 = await import("bs58")
+        const decoded = bs58.default.decode(process.env.CREATOR_PRIVATE_KEY)
+        privateKeyArray = Array.from(decoded)
+      }
+    } catch (error) {
+      console.error("❌ Error parsing private key:", error)
+      return res.status(500).json({
+        success: false,
+        error: "Invalid CREATOR_PRIVATE_KEY format",
+      })
     }
 
-    // Create Web3.js keypair
+    // Create Web3.js keypair with proper Uint8Array
     const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
     console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
 
