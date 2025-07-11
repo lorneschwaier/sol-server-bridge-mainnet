@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { Connection, Transaction } = require("@solana/web3.js")
+    const { Connection, clusterApiUrl } = await import("@solana/web3.js")
 
     const { signedTx } = req.body
 
@@ -28,21 +28,17 @@ export default async function handler(req, res) {
       })
     }
 
-    // Create connection to Solana
-    const connection = new Connection(process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com", "confirmed")
+    // Create connection to Solana mainnet
+    const connection = new Connection(process.env.SOLANA_RPC_URL || clusterApiUrl("mainnet-beta"), "confirmed")
 
     // Deserialize the signed transaction
-    const transaction = Transaction.from(Buffer.from(signedTx, "base64"))
-
-    console.log("📡 Broadcasting transaction to Solana...")
+    const transaction = Buffer.from(signedTx, "base64")
 
     // Send the transaction
-    const signature = await connection.sendRawTransaction(transaction.serialize(), {
+    const signature = await connection.sendRawTransaction(transaction, {
       skipPreflight: false,
       preflightCommitment: "confirmed",
     })
-
-    console.log("✅ Transaction sent! Signature:", signature)
 
     // Wait for confirmation
     const confirmation = await connection.confirmTransaction(signature, "confirmed")
@@ -51,7 +47,7 @@ export default async function handler(req, res) {
       throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`)
     }
 
-    console.log("✅ Transaction confirmed!")
+    console.log("✅ Transaction sent successfully:", signature)
 
     return res.status(200).json({
       success: true,
