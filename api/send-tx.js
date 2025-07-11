@@ -4,7 +4,6 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 
-  // Handle preflight requests
   if (req.method === "OPTIONS") {
     res.status(200).end()
     return
@@ -20,12 +19,12 @@ export default async function handler(req, res) {
     if (!signedTx) {
       return res.status(400).json({
         success: false,
-        error: "Missing signedTx parameter",
+        error: "Missing signed transaction",
       })
     }
 
     // Dynamic imports
-    const { Connection, clusterApiUrl } = await import("@solana/web3.js")
+    const { Connection, clusterApiUrl, Transaction } = await import("@solana/web3.js")
 
     // Environment variables
     const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
@@ -37,22 +36,57 @@ export default async function handler(req, res) {
 
     const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
-    // Send the raw transaction
-    const signature = await connection.sendRawTransaction(Buffer.from(signedTx, "base64"), {
+    // Deserialize the transaction to update blockhash
+    const transaction = Transaction.from(Buffer.from(signedTx, "base64"))
+
+    // Get fresh blockhash right before sending
+    console.log("🔄 Getting fresh blockhash before sending...")
+    const { blockhash } = await connection.getLatestBlockhash("confirmed")
+
+    // Update the transaction with fresh blockhash
+    transaction.recentBlockhash = blockhash
+
+    console.log("✅ Updated transaction with fresh blockhash:", blockhash)
+
+    // Send the transaction with updated blockhash
+    const signature = await connection.sendRawTransaction(transaction.serialize(), {
       skipPreflight: false,
-      preflightCommitment: "processed",
+      preflightCommitment: "confirmed",
       maxRetries: 3,
     })
 
     console.log("✅ Transaction sent:", signature)
 
+    // Wait for confirmation with timeout
+    const confirmationPromise = connection.confirmTransaction(
+      {
+        signature,
+        blockhash,
+        lastValidBlockHeight: (await connection.getLatestBlockhash()).lastValidBlockHeight,
+      },
+      "confirmed",
+    )
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Confirmation timeout")), 30000),
+    )
+
+    const confirmation = await Promise.race([confirmationPromise, timeoutPromise])
+
+    if (confirmation.value?.err) {
+      throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`)
+    }
+
+    console.log("✅ Transaction confirmed:", signature)
+
     res.status(200).json({
       success: true,
       signature: signature,
       network: SOLANA_NETWORK,
+      timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error("❌ Transaction sending failed:", error)
+    console.error("❌ Send transaction error:", error)
     res.status(500).json({
       success: false,
       error: error.message,
