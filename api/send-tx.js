@@ -1,8 +1,8 @@
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
   if (req.method === "OPTIONS") {
     res.status(200).end()
@@ -10,7 +10,10 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" })
+    return res.status(405).json({
+      success: false,
+      error: "Method not allowed",
+    })
   }
 
   try {
@@ -82,14 +85,27 @@ export default async function handler(req, res) {
     res.status(200).json({
       success: true,
       signature: signature,
+      confirmation: confirmation.value,
       network: SOLANA_NETWORK,
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
     console.error("❌ Send transaction error:", error)
+
+    let errorMessage = error.message || "Unknown error"
+
+    // Handle specific error types
+    if (errorMessage.includes("Blockhash not found")) {
+      errorMessage = "Transaction failed: Blockhash expired. Please try again."
+    } else if (errorMessage.includes("insufficient funds")) {
+      errorMessage = "Transaction failed: Insufficient SOL balance."
+    } else if (errorMessage.includes("Simulation failed")) {
+      errorMessage = `Transaction failed: Simulation failed. ${error.message}`
+    }
+
     res.status(500).json({
       success: false,
-      error: error.message,
+      error: errorMessage,
     })
   }
 }
