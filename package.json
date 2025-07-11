@@ -7,24 +7,25 @@
     "dev": "node index.js",
     "build": "echo 'Build complete'",
     "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node api/test-metaplex.js"
   },
   "dependencies": {
     "@metaplex-foundation/mpl-core": "^1.1.1",
     "@metaplex-foundation/umi": "^0.9.2",
     "@metaplex-foundation/umi-bundle-defaults": "^0.9.2",
     "@metaplex-foundation/umi-web3js-adapters": "^0.9.2",
-    "@solana/web3.js": "^1.95.4",
-    "axios": "^1.7.7",
-    "bs58": "^6.0.0",
+    "@solana/web3.js": "^1.95.2",
+    "axios": "^1.7.2",
+    "bs58": "^5.0.0",
     "buffer": "^6.0.3",
     "cors": "^2.8.5",
-    "express": "^4.21.1"
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "keywords": ["solana", "nft", "metaplex", "blockchain", "wordpress"],
-  "author": "Your Name",
+  "author": "Solana NFT Bridge",
   "license": "MIT"
 }
