@@ -1,4 +1,4 @@
-// Proper Buffer polyfill for Vercel serverless environment
+// Fix Buffer issues in serverless environment FIRST
 if (typeof global !== "undefined") {
   if (!global.Buffer) {
     const { Buffer } = require("buffer")
@@ -63,9 +63,7 @@ export default async function handler(req, res) {
 
     // Environment variables
     const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
-    const SOLANA_RPC_URL =
-      process.env.SOLANA_RPC_URL ||
-      (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
+    const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
 
     console.log("🎨 === NFT MINTING REQUEST ===")
     console.log("👤 Wallet:", walletAddress)
