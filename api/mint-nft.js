@@ -4,11 +4,6 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 
-  // Fix Buffer issues in serverless environment
-  if (typeof global.Buffer === "undefined") {
-    global.Buffer = require("buffer").Buffer
-  }
-
   // Handle preflight requests
   if (req.method === "OPTIONS") {
     res.status(200).end()
@@ -21,10 +16,6 @@ export default async function handler(req, res) {
 
   try {
     const { walletAddress, metadata } = req.body
-
-    console.log("🎨 === NFT MINTING REQUEST ===")
-    console.log("👤 Wallet:", walletAddress)
-    console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
 
     if (!walletAddress || !metadata) {
       return res.status(400).json({
@@ -48,24 +39,24 @@ export default async function handler(req, res) {
       })
     }
 
-    // Fix Buffer issues in serverless environment
-    if (typeof global.Buffer === "undefined") {
-      global.Buffer = require("buffer").Buffer
-    }
-
-    // Dynamic imports with proper error handling
+    // Dynamic imports
     const { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } = await import("@solana/web3.js")
     const { createUmi } = await import("@metaplex-foundation/umi-bundle-defaults")
     const { createV1, mplCore } = await import("@metaplex-foundation/mpl-core")
     const { keypairIdentity, generateSigner, publicKey, some, none } = await import("@metaplex-foundation/umi")
     const { fromWeb3JsKeypair } = await import("@metaplex-foundation/umi-web3js-adapters")
     const axios = await import("axios")
+    const bs58 = await import("bs58")
 
     // Environment variables
     const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
     const SOLANA_RPC_URL =
       process.env.SOLANA_RPC_URL ||
       (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
+
+    console.log("🎨 === NFT MINTING REQUEST ===")
+    console.log("👤 Wallet:", walletAddress)
+    console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
 
     // Validate wallet address
     try {
@@ -105,26 +96,15 @@ export default async function handler(req, res) {
 
     const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
-    // Parse private key with proper Buffer handling
+    // Parse private key
     let privateKeyArray
-    try {
-      if (process.env.CREATOR_PRIVATE_KEY.startsWith("[")) {
-        privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY)
-      } else {
-        // Use dynamic import for bs58 to avoid Buffer issues
-        const bs58 = await import("bs58")
-        const decoded = bs58.default.decode(process.env.CREATOR_PRIVATE_KEY)
-        privateKeyArray = Array.from(decoded)
-      }
-    } catch (error) {
-      console.error("❌ Error parsing private key:", error)
-      return res.status(500).json({
-        success: false,
-        error: "Invalid CREATOR_PRIVATE_KEY format",
-      })
+    if (process.env.CREATOR_PRIVATE_KEY.startsWith("[")) {
+      privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY)
+    } else {
+      privateKeyArray = Array.from(bs58.default.decode(process.env.CREATOR_PRIVATE_KEY))
     }
 
-    // Create Web3.js keypair with proper Uint8Array
+    // Create Web3.js keypair
     const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
     console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
 
