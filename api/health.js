@@ -4,27 +4,34 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 
+  // Handle preflight requests
   if (req.method === "OPTIONS") {
     res.status(200).end()
     return
   }
 
   try {
-    const environment = {
-      nodeVersion: process.version,
-      platform: process.platform,
-      solanaNetwork: process.env.SOLANA_NETWORK || "mainnet-beta",
-      pinataConfigured: !!(process.env.PINATA_API_KEY && process.env.PINATA_SECRET_KEY),
-      creatorKeyConfigured: !!process.env.CREATOR_PRIVATE_KEY,
-    }
+    // Environment variables
+    const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
+    const SOLANA_RPC_URL =
+      process.env.SOLANA_RPC_URL ||
+      (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : "https://api.devnet.solana.com")
 
     res.status(200).json({
       status: "ok",
       timestamp: new Date().toISOString(),
-      message: "Solana NFT Bridge is running",
-      environment,
+      network: SOLANA_NETWORK,
+      rpcUrl: SOLANA_RPC_URL,
+      mode: "real_minting_core",
+      environment: {
+        pinataConfigured: !!(process.env.PINATA_API_KEY && process.env.PINATA_SECRET_KEY),
+        creatorKeyConfigured: !!process.env.CREATOR_PRIVATE_KEY,
+        metaplexCoreReady: true,
+      },
+      message: "Solana NFT Bridge Server is running",
     })
   } catch (error) {
+    console.error("❌ Health check error:", error)
     res.status(500).json({
       status: "error",
       error: error.message,
