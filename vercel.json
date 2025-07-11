@@ -1,21 +1,31 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
+
+  // Disable any build step
+  "buildCommand": null,                  
+
+  // Don’t expect a `public` folder—serve from root (or nothing)
+  "outputDirectory": "",                 
+
   "functions": {
     "api/*.js": {
       "runtime": "@vercel/node@3.0.0"
     }
   },
+
   "routes": [
     {
       "src": "/api/(.*)",
       "dest": "/api/$1"
     }
   ],
+
   "headers": [
     {
       "source": "/api/(.*)",
       "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Origin",  "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
         { "key": "Access-Control-Allow-Headers", "value": "Content-Type" }
       ]
