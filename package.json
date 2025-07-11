@@ -1,12 +1,13 @@
 {
   "name": "solana-nft-bridge",
   "version": "1.0.0",
-  "description": "Solana NFT Bridge Server for WordPress",
+  "description": "Solana NFT Bridge Server for WordPress Integration",
   "main": "index.js",
   "scripts": {
-    "dev": "vercel dev",
+    "dev": "node index.js",
     "build": "echo 'Build complete'",
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
     "@metaplex-foundation/mpl-core": "^1.1.1",
@@ -16,13 +17,14 @@
     "@solana/web3.js": "^1.95.4",
     "axios": "^1.7.7",
     "bs58": "^6.0.0",
+    "buffer": "^6.0.3",
     "cors": "^2.8.5",
     "express": "^4.21.1"
   },
   "engines": {
     "node": ">=18.0.0"
   },
-  "keywords": ["solana", "nft", "metaplex", "blockchain", "web3"],
-  "author": "Solana NFT Maker",
+  "keywords": ["solana", "nft", "metaplex", "blockchain", "wordpress"],
+  "author": "Your Name",
   "license": "MIT"
 }
