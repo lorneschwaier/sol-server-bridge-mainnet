@@ -12,14 +12,13 @@ export default async function handler(req, res) {
 
   try {
     if (!process.env.PINATA_API_KEY || !process.env.PINATA_SECRET_KEY) {
-      return res.status(200).json({
+      return res.json({
         success: false,
         configured: false,
         error: "Pinata API credentials not configured",
       })
     }
 
-    // Dynamic import
     const axios = await import("axios")
 
     const testData = {
@@ -38,7 +37,7 @@ export default async function handler(req, res) {
       },
     })
 
-    res.status(200).json({
+    res.json({
       success: true,
       configured: true,
       url: `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`,
@@ -46,8 +45,7 @@ export default async function handler(req, res) {
       message: "Pinata working correctly for Metaplex Core metadata",
     })
   } catch (error) {
-    console.error("❌ Pinata test error:", error)
-    res.status(500).json({
+    res.json({
       success: false,
       configured: true,
       error: error.message,
