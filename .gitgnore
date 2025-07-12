@@ -10,6 +10,8 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
+.env.staging
 
 # Vercel
 .vercel
@@ -59,3 +61,7 @@ jspm_packages/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# IDE configuration files
+.vscode/
+.idea/
