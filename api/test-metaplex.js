@@ -4,85 +4,70 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 
-  // Handle preflight requests
   if (req.method === "OPTIONS") {
-    res.status(200).end()
-    return
+    return res.status(200).end()
   }
 
   try {
-    // Fix Buffer issues in serverless environment
-    if (typeof global.Buffer === "undefined") {
-      global.Buffer = require("buffer").Buffer
+    const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
+    const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
+
+    if (!CREATOR_PRIVATE_KEY) {
+      return res.status(500).json({
+        success: false,
+        error: "CREATOR_PRIVATE_KEY not configured",
+      })
     }
 
-    const { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } = await import("@solana/web3.js")
+    // Dynamic imports
     const { createUmi } = await import("@metaplex-foundation/umi-bundle-defaults")
+    const { createSignerFromKeypair, signerIdentity } = await import("@metaplex-foundation/umi")
     const { mplCore } = await import("@metaplex-foundation/mpl-core")
-    const { keypairIdentity } = await import("@metaplex-foundation/umi")
     const { fromWeb3JsKeypair } = await import("@metaplex-foundation/umi-web3js-adapters")
+    const { Keypair, Connection, LAMPORTS_PER_SOL } = await import("@solana/web3.js")
+    const bs58 = (await import("bs58")).default
 
-    if (!process.env.CREATOR_PRIVATE_KEY) {
-      return res.json({
-        success: false,
-        error: "Creator private key not configured",
-        configured: false,
-      })
-    }
+    console.log("🧪 Testing Metaplex connection...")
 
-    // Environment variables
-    const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
-    const SOLANA_RPC_URL =
-      process.env.SOLANA_RPC_URL ||
-      (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
-
-    const connection = new Connection(SOLANA_RPC_URL, "confirmed")
-
-    // Parse private key with proper Buffer handling
+    // Parse creator private key
     let privateKeyArray
-    try {
-      if (process.env.CREATOR_PRIVATE_KEY.startsWith("[")) {
-        privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY)
-      } else {
-        const bs58 = await import("bs58")
-        const decoded = bs58.default.decode(process.env.CREATOR_PRIVATE_KEY)
-        privateKeyArray = Array.from(decoded)
-      }
-    } catch (error) {
-      return res.json({
-        success: false,
-        error: "Invalid CREATOR_PRIVATE_KEY format: " + error.message,
-        configured: true,
-      })
+    if (CREATOR_PRIVATE_KEY.startsWith("[")) {
+      privateKeyArray = JSON.parse(CREATOR_PRIVATE_KEY)
+    } else {
+      privateKeyArray = Array.from(bs58.decode(CREATOR_PRIVATE_KEY))
     }
 
     const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
-    const balance = await connection.getBalance(creatorKeypair.publicKey)
+    console.log("🔑 Creator wallet:", creatorKeypair.publicKey.toString())
 
-    // Initialize UMI
+    // Check balance
+    const connection = new Connection(SOLANA_RPC_URL, "confirmed")
+    const balance = await connection.getBalance(creatorKeypair.publicKey)
+    console.log("💰 Wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
+
+    // Initialize Umi
     const umi = createUmi(SOLANA_RPC_URL).use(mplCore())
     const umiKeypair = fromWeb3JsKeypair(creatorKeypair)
-    const creatorUmi = umi.use(keypairIdentity(umiKeypair))
+    const signer = createSignerFromKeypair(umi, umiKeypair)
+    umi.use(signerIdentity(signer))
 
-    res.json({
+    console.log("✅ Metaplex test successful!")
+
+    res.status(200).json({
       success: true,
-      configured: true,
+      message: "Metaplex connection successful!",
       creatorWallet: creatorKeypair.publicKey.toString(),
       balance: balance / LAMPORTS_PER_SOL,
-      network: SOLANA_NETWORK,
+      network: process.env.SOLANA_NETWORK || "mainnet-beta",
       rpcUrl: SOLANA_RPC_URL,
-      metaplexCoreReady: true,
-      version: "Metaplex Core v1.1.1",
-      message:
-        balance < 0.01 * LAMPORTS_PER_SOL
-          ? "⚠️ Low balance - please fund wallet"
-          : "✅ Ready for real NFT minting with Metaplex Core",
     })
   } catch (error) {
-    res.json({
+    console.error("❌ Metaplex test error:", error)
+
+    res.status(500).json({
       success: false,
       error: error.message,
-      configured: !!process.env.CREATOR_PRIVATE_KEY,
+      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
     })
   }
 }
