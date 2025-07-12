@@ -1,3 +1,13 @@
+// Add at the very top of api/mint-nft.js
+const { Buffer } = require('buffer');
+
+// Polyfill Buffer for Vercel serverless environment
+if (typeof global !== 'undefined') {
+  global.Buffer = Buffer;
+}
+
+// ... rest of your existing code
+
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
