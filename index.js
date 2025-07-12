@@ -1,3 +1,25 @@
+const express = require("express")
+const cors = require("cors")
+const { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } = require("@solana/web3.js")
+const { createUmi } = require("@metaplex-foundation/umi-bundle-defaults")
+const { createV1, mplCore } = require("@metaplex-foundation/mpl-core")
+const { keypairIdentity, generateSigner, publicKey, some, none } = require("@metaplex-foundation/umi")
+const { fromWeb3JsKeypair } = require("@metaplex-foundation/umi-web3js-adapters")
+const axios = require("axios")
+const bs58 = require("bs58")
+
+const app = express()
+const PORT = process.env.PORT || 3000
+
+// CORS configuration - Allow all origins for now
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    credentials: false,
+  }),
+)
 
 // Handle preflight requests
 app.options("*", cors())
