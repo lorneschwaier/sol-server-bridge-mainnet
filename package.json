@@ -1,12 +1,12 @@
 {
   "name": "solana-nft-bridge",
   "version": "1.0.0",
-  "description": "Solana NFT Bridge Server",
+  "description": "Solana NFT minting bridge for Vercel",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node index.js",
-    "build": "echo 'Build complete'"
+    "dev": "vercel dev",
+    "build": "echo 'Build complete'",
+    "start": "vercel dev"
   },
   "dependencies": {
     "@metaplex-foundation/mpl-core": "^1.1.1",
@@ -16,10 +16,10 @@
     "@solana/web3.js": "^1.95.4",
     "axios": "^1.7.7",
     "bs58": "^6.0.0",
-    "buffer": "^6.0.3",
-    "process": "^0.11.10",
-    "cors": "^2.8.5",
-    "express": "^4.21.1"
+    "buffer": "^6.0.3"
+  },
+  "devDependencies": {
+    "@vercel/node": "^3.2.17"
   },
   "engines": {
     "node": ">=18.0.0"
