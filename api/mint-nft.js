@@ -1,9 +1,10 @@
 import { Connection, PublicKey } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
-import { createNft, mplTokenMetadata } from "@metaplex-foundation/mpl-token-metadata"
-import { generateSigner, keypairIdentity, percentAmount } from "@metaplex-foundation/umi"
+import { mplCore } from "@metaplex-foundation/mpl-core"
+import { generateSigner, keypairIdentity } from "@metaplex-foundation/umi"
+import { base58 } from "@metaplex-foundation/umi/serializers"
 import axios from "axios"
-import FormData from "form-data"
+import { createV1 } from "@metaplex-foundation/mpl-token-metadata" // Import createV1
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -20,124 +21,90 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { name, description, image, attributes, collection, walletAddress, payerPrivateKey } = req.body
+    const { walletAddress, nftName, nftDescription, imageUrl, collectionAddress, attributes = [] } = req.body
 
     // Validate required fields
-    if (!name || !description || !image || !walletAddress) {
+    if (!walletAddress || !nftName || !imageUrl) {
       return res.status(400).json({
         success: false,
-        error: "Missing required fields: name, description, image, walletAddress",
+        error: "Missing required fields: walletAddress, nftName, imageUrl",
       })
     }
 
-    console.log("Starting NFT minting process for:", name)
+    console.log("Minting NFT for:", walletAddress)
+    console.log("NFT Name:", nftName)
+    console.log("Image URL:", imageUrl)
 
     // Initialize Solana connection
     const connection = new Connection(process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com", "confirmed")
 
     // Initialize UMI
-    const umi = createUmi(process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com").use(mplTokenMetadata())
+    const umi = createUmi(process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com")
 
-    // Set up payer keypair
-    if (!payerPrivateKey) {
-      return res.status(400).json({
-        success: false,
-        error: "Payer private key is required",
-      })
+    // Create keypair from private key
+    if (!process.env.SOLANA_PRIVATE_KEY) {
+      throw new Error("SOLANA_PRIVATE_KEY environment variable not set")
     }
 
-    const payerKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(JSON.parse(payerPrivateKey)))
-    umi.use(keypairIdentity(payerKeypair))
-
-    // Upload image to Pinata if it's base64
-    let imageUrl = image
-    if (image.startsWith("data:image/")) {
-      console.log("Uploading image to Pinata...")
-
-      const base64Data = image.split(",")[1]
-      const buffer = Buffer.from(base64Data, "base64")
-
-      const formData = new FormData()
-      formData.append("file", buffer, { filename: `${name}.png` })
-
-      const pinataResponse = await axios.post("https://api.pinata.cloud/pinning/pinFileToIPFS", formData, {
-        headers: {
-          ...formData.getHeaders(),
-          Authorization: `Bearer ${process.env.PINATA_JWT}`,
-        },
-      })
-
-      imageUrl = `https://gateway.pinata.cloud/ipfs/${pinataResponse.data.IpfsHash}`
-      console.log("Image uploaded to IPFS:", imageUrl)
-    }
-
-    // Create metadata object
-    const metadata = {
-      name,
-      description,
-      image: imageUrl,
-      attributes: attributes || [],
-      properties: {
-        files: [
-          {
-            uri: imageUrl,
-            type: "image/png",
-          },
-        ],
-        category: "image",
-      },
-    }
+    const privateKeyBytes = base58.serialize(process.env.SOLANA_PRIVATE_KEY)
+    const keypair = umi.eddsa.createKeypairFromSecretKey(privateKeyBytes)
+    umi.use(keypairIdentity(keypair))
+    umi.use(mplCore())
 
     // Upload metadata to Pinata
+    const metadata = {
+      name: nftName,
+      description: nftDescription || "",
+      image: imageUrl,
+      attributes: attributes,
+    }
+
     console.log("Uploading metadata to Pinata...")
-    const metadataResponse = await axios.post("https://api.pinata.cloud/pinning/pinJSONToIPFS", metadata, {
+
+    const pinataResponse = await axios.post("https://api.pinata.cloud/pinning/pinJSONToIPFS", metadata, {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${process.env.PINATA_JWT}`,
       },
     })
 
-    const metadataUri = `https://gateway.pinata.cloud/ipfs/${metadataResponse.data.IpfsHash}`
-    console.log("Metadata uploaded to IPFS:", metadataUri)
+    const metadataUri = `https://gateway.pinata.cloud/ipfs/${pinataResponse.data.IpfsHash}`
+    console.log("Metadata uploaded to:", metadataUri)
 
-    // Generate mint keypair
-    const mint = generateSigner(umi)
+    // Generate asset signer
+    const asset = generateSigner(umi)
 
-    // Create NFT transaction
-    console.log("Creating NFT transaction...")
-    const createNftTx = createNft(umi, {
-      mint,
-      name,
+    // Create mint instruction
+    const mintInstruction = await createV1(umi, {
+      asset,
+      name: nftName,
       uri: metadataUri,
-      sellerFeeBasisPoints: percentAmount(5.5),
-      collection: collection ? { key: new PublicKey(collection), verified: false } : undefined,
-      creators: [
-        {
-          address: umi.identity.publicKey,
-          verified: true,
-          share: 100,
-        },
-      ],
+      owner: new PublicKey(walletAddress),
+      collection: collectionAddress
+        ? {
+            key: new PublicKey(collectionAddress),
+            verified: false,
+          }
+        : undefined,
     })
 
-    // Send and confirm transaction
-    console.log("Sending NFT creation transaction...")
-    const result = await createNftTx.sendAndConfirm(umi)
+    // Build and send transaction
+    const transaction = await mintInstruction.buildAndSign(umi)
+    const signature = await umi.rpc.sendAndConfirmTransaction(transaction)
 
     console.log("NFT minted successfully!")
-    console.log("Transaction signature:", result.signature)
-    console.log("Mint address:", mint.publicKey)
+    console.log("Transaction signature:", base58.deserialize(signature)[0])
+    console.log("Asset address:", asset.publicKey)
 
     return res.status(200).json({
       success: true,
-      signature: result.signature,
-      mintAddress: mint.publicKey,
-      metadataUri,
-      imageUrl,
+      signature: base58.deserialize(signature)[0],
+      assetAddress: asset.publicKey,
+      metadataUri: metadataUri,
       message: "NFT minted successfully",
     })
   } catch (error) {
-    console.error("NFT minting error:", error)
+    console.error("Minting error:", error)
 
     return res.status(500).json({
       success: false,
