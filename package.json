@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Solana NFT minting bridge for Vercel",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "dev": "vercel dev",
     "build": "echo 'Build complete'",
@@ -17,9 +18,6 @@
     "axios": "^1.7.7",
     "bs58": "^6.0.0",
     "buffer": "^6.0.3"
-  },
-  "devDependencies": {
-    "@vercel/node": "^3.2.17"
   },
   "engines": {
     "node": ">=18.0.0"
