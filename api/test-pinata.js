@@ -5,24 +5,27 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 
   if (req.method === "OPTIONS") {
-    res.status(200).end()
-    return
+    return res.status(200).end()
   }
 
   try {
-    if (!process.env.PINATA_API_KEY || !process.env.PINATA_SECRET_KEY) {
+    const axios = (await import("axios")).default
+
+    const PINATA_API_KEY = process.env.PINATA_API_KEY
+    const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
+
+    if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
       return res.status(500).json({
         success: false,
         error: "Pinata API credentials not configured",
       })
     }
 
-    const axios = await import("axios")
-
+    // Test metadata
     const testMetadata = {
       name: "Test NFT",
       description: "This is a test NFT for Pinata connection",
-      image: "https://example.com/test-image.png",
+      image: "https://via.placeholder.com/500x500.png?text=Test+NFT",
       attributes: [
         {
           trait_type: "Test",
@@ -33,7 +36,7 @@ export default async function handler(req, res) {
 
     console.log("🧪 Testing Pinata connection...")
 
-    const response = await axios.default.post(
+    const response = await axios.post(
       "https://api.pinata.cloud/pinning/pinJSONToIPFS",
       {
         pinataContent: testMetadata,
@@ -43,30 +46,38 @@ export default async function handler(req, res) {
       },
       {
         headers: {
-          pinata_api_key: process.env.PINATA_API_KEY,
-          pinata_secret_api_key: process.env.PINATA_SECRET_KEY,
+          "Content-Type": "application/json",
+          pinata_api_key: PINATA_API_KEY,
+          pinata_secret_api_key: PINATA_SECRET_KEY,
         },
-        timeout: 30000,
       },
     )
 
     const metadataUrl = `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`
 
-    console.log("✅ Pinata test successful:", metadataUrl)
+    console.log("✅ Pinata test successful!")
+    console.log("   - IPFS Hash:", response.data.IpfsHash)
+    console.log("   - URL:", metadataUrl)
 
     res.status(200).json({
       success: true,
-      message: "Pinata connection test successful",
+      message: "Pinata connection successful!",
       ipfsHash: response.data.IpfsHash,
-      metadataUrl: metadataUrl,
+      metadataUrl,
       testData: testMetadata,
     })
   } catch (error) {
     console.error("❌ Pinata test error:", error)
+
+    let errorMessage = error.message
+    if (error.response) {
+      errorMessage = `HTTP ${error.response.status}: ${error.response.data?.error || error.response.statusText}`
+    }
+
     res.status(500).json({
       success: false,
-      error: error.message,
-      details: error.response?.data || "No additional details",
+      error: errorMessage,
+      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
     })
   }
 }
