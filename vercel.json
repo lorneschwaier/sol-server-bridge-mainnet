@@ -13,8 +13,8 @@
   ],
 
   "functions": {
-    "api/*.js": {
-      "runtime": "@vercel/node@3.0.0",
+    "api/**/*.js": {
+      "runtime": "nodejs18.x",
       "maxDuration": 30
     }
   },
