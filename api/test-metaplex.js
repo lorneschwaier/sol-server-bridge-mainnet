@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
@@ -24,10 +23,10 @@ export default async function handler(req, res) {
     const { createSignerFromKeypair, signerIdentity } = await import("@metaplex-foundation/umi")
     const { mplCore } = await import("@metaplex-foundation/mpl-core")
     const { fromWeb3JsKeypair } = await import("@metaplex-foundation/umi-web3js-adapters")
-    const { Keypair, Connection, LAMPORTS_PER_SOL } = await import("@solana/web3.js")
+    const { Keypair, Connection } = await import("@solana/web3.js")
     const bs58 = (await import("bs58")).default
 
-    console.log("🧪 Testing Metaplex connection...")
+    console.log("Testing Metaplex connection...")
 
     // Parse creator private key
     let privateKeyArray
@@ -38,12 +37,11 @@ export default async function handler(req, res) {
     }
 
     const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
-    console.log("🔑 Creator wallet:", creatorKeypair.publicKey.toString())
+    console.log("Creator wallet:", creatorKeypair.publicKey.toString())
 
-    // Check balance
+    // Test connection
     const connection = new Connection(SOLANA_RPC_URL, "confirmed")
     const balance = await connection.getBalance(creatorKeypair.publicKey)
-    console.log("💰 Wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
 
     // Initialize Umi
     const umi = createUmi(SOLANA_RPC_URL).use(mplCore())
@@ -51,23 +49,20 @@ export default async function handler(req, res) {
     const signer = createSignerFromKeypair(umi, umiKeypair)
     umi.use(signerIdentity(signer))
 
-    console.log("✅ Metaplex test successful!")
-
     res.status(200).json({
       success: true,
-      message: "Metaplex connection successful!",
+      message: "Metaplex connection successful",
       creatorWallet: creatorKeypair.publicKey.toString(),
-      balance: balance / LAMPORTS_PER_SOL,
+      balance: balance / 1000000000, // Convert lamports to SOL
       network: process.env.SOLANA_NETWORK || "mainnet-beta",
       rpcUrl: SOLANA_RPC_URL,
     })
   } catch (error) {
-    console.error("❌ Metaplex test error:", error)
-
+    console.error("Metaplex test error:", error)
     res.status(500).json({
       success: false,
       error: error.message,
-      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      details: error.stack,
     })
   }
 }
