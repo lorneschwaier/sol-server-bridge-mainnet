@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
@@ -9,11 +8,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { Connection, clusterApiUrl } = await import("@solana/web3.js")
-
+    const { Connection } = await import("@solana/web3.js")
     const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
-    const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
+    const connection = new Connection(SOLANA_RPC_URL, "confirmed")
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
 
     res.status(200).json({
