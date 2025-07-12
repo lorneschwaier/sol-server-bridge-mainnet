@@ -100,7 +100,7 @@ export default async function handler(req, res) {
     const asset = generateSigner(umi)
     console.log("🎯 Asset address:", asset.publicKey)
 
-    // Create NFT with collection guard
+    // Create NFT
     console.log("🎨 Creating NFT...")
 
     const createResult = await createV1(umi, {
@@ -108,8 +108,6 @@ export default async function handler(req, res) {
       name: metadata.name || "Unnamed NFT",
       uri: metadataUrl,
       owner: walletAddress,
-      // Remove collection to prevent buffer.slice error
-      // collection: null,
       plugins: [],
     }).sendAndConfirm(umi)
 
