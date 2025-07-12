@@ -1,70 +1,69 @@
-import { Connection, Transaction } from "@solana/web3.js"
-
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 
+  // Handle preflight requests
   if (req.method === "OPTIONS") {
-    return res.status(200).end()
+    res.status(200).end()
+    return
   }
 
   if (req.method !== "POST") {
-    return res.status(405).json({ success: false, error: "Method not allowed" })
+    return res.status(405).json({ error: "Method not allowed" })
   }
 
   try {
-    // Accept both 'transaction' and 'signedTx' field names for backward compatibility
-    const { signedTx, transaction: txData } = req.body
-    const txB64 = txData || signedTx
+    const { signedTx } = req.body
 
-    if (!txB64) {
+    if (!signedTx) {
       return res.status(400).json({
         success: false,
-        error: 'Missing transaction data. Expected either "transaction" or "signedTx" field.',
+        error: "Missing signed transaction",
       })
     }
 
-    console.log("Received transaction data:", txB64.substring(0, 50) + "...")
+    // Dynamic imports
+    const { Connection, clusterApiUrl, Transaction } = await import("@solana/web3.js")
+
+    // Environment variables
+    const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
+    const SOLANA_RPC_URL =
+      process.env.SOLANA_RPC_URL ||
+      (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
 
     // Initialize connection
-    const connection = new Connection(process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com", "confirmed")
+    const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
-    // Deserialize the transaction
-    const deserializedTransaction = Transaction.from(Buffer.from(txB64, "base64"))
+    // Deserialize transaction
+    const transaction = Transaction.from(Buffer.from(signedTx, "base64"))
 
-    console.log("Transaction deserialized successfully")
-
-    // Send the transaction
-    const signature = await connection.sendRawTransaction(deserializedTransaction.serialize(), {
+    // Send transaction
+    const signature = await connection.sendRawTransaction(transaction.serialize(), {
       skipPreflight: false,
       preflightCommitment: "confirmed",
     })
 
-    console.log("Transaction sent with signature:", signature)
+    console.log("✅ Transaction sent successfully:", signature)
 
     // Wait for confirmation
     const confirmation = await connection.confirmTransaction(signature, "confirmed")
 
     if (confirmation.value.err) {
-      throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`)
+      throw new Error("Transaction failed: " + JSON.stringify(confirmation.value.err))
     }
 
-    console.log("Transaction confirmed successfully")
-
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       signature: signature,
-      message: "Transaction sent and confirmed successfully",
+      network: SOLANA_NETWORK,
     })
   } catch (error) {
-    console.error("Bridge server error:", error)
-
-    return res.status(500).json({
+    console.error("❌ Send transaction error:", error)
+    res.status(500).json({
       success: false,
-      error: error.message || "Internal server error",
-      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      error: error.message,
     })
   }
 }
