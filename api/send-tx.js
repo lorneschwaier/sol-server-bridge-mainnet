@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
@@ -23,22 +22,20 @@ export default async function handler(req, res) {
     }
 
     const { Connection, Transaction } = await import("@solana/web3.js")
-    const bs58 = (await import("bs58")).default
-
     const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
+
     const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
-    // Decode the transaction
-    const txBuffer = bs58.decode(transaction)
-    const tx = Transaction.from(txBuffer)
+    // Deserialize transaction
+    const tx = Transaction.from(Buffer.from(transaction, "base64"))
 
-    // Send the transaction
+    // Send transaction
     const signature = await connection.sendRawTransaction(tx.serialize(), {
       skipPreflight: false,
       preflightCommitment: "confirmed",
     })
 
-    // Confirm the transaction
+    // Confirm transaction
     const confirmation = await connection.confirmTransaction(signature, "confirmed")
 
     res.status(200).json({
