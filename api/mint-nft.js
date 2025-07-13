@@ -1,6 +1,8 @@
-// Required for buffer-based deps on Vercel
-globalThis.Buffer = globalThis.Buffer || require('buffer').Buffer;
+// ✅ Polyfill Buffer for Vercel (Node SSR env)
+import { Buffer } from 'buffer';
+globalThis.Buffer = globalThis.Buffer || Buffer;
 
+// ✅ Imports
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { createNft } from '@metaplex-foundation/mpl-token-metadata';
 import {
@@ -26,13 +28,17 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'Missing walletAddress or metadata' });
     }
 
-    // 🔐 Load your private key from Vercel env
+    // ✅ Get and validate RPC endpoint
+    const rpcEndpoint = process.env.RPC_URL || 'https://api.mainnet-beta.solana.com';
+    console.log('🔗 Using Solana RPC endpoint:', rpcEndpoint);
+    const umi = createUmi(rpcEndpoint);
+
+    // 🔐 Load private key from env
     const secretKey = JSON.parse(process.env.CREATOR_PRIVATE_KEY);
-    const umi = createUmi(process.env.SOLANA_RPC_URL);
     const payer = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(secretKey));
     umi.use(keypairIdentity(payer));
 
-    // 🎨 Mint NFT
+    // 🧬 Mint signer and metadata
     const mint = generateSigner(umi);
     const {
       name = 'X1XO NFT',
@@ -49,14 +55,14 @@ export default async function handler(req, res) {
       name,
       uri,
       symbol,
-      sellerFeeBasisPoints: 500,
+      sellerFeeBasisPoints: 500, // 5% royalties
       decimals: 0,
       isMutable: true,
       creators: [
         {
           address: payer.publicKey,
           verified: true,
-          share: 100,
+          share: 100
         }
       ],
       tokenOwner: fromWeb3JsPublicKey(walletAddress)
@@ -66,11 +72,14 @@ export default async function handler(req, res) {
       success: true,
       mintAddress: mint.publicKey.toString(),
       transactionSignature: nft.signature.toString(),
-      message: 'NFT minted successfully on Solana!'
+      message: '✅ NFT minted successfully!'
     });
 
   } catch (error) {
     console.error('❌ Minting failed:', error);
-    return res.status(500).json({ success: false, error: error.message || 'Minting failed' });
+    return res.status(500).json({
+      success: false,
+      error: error?.message || 'Unknown error during minting'
+    });
   }
 }
