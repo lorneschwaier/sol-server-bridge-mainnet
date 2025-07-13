@@ -13,12 +13,21 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata } = req.body;
 
-    console.log("🎨 === GUARANTEED NFT WITH METADATA ===");
+    console.log("🎨 === STRICT NFT MINTING - METADATA REQUIRED ===");
 
     if (!walletAddress || !metadata) {
       return res.status(400).json({
         success: false,
         error: "Missing required fields: walletAddress and metadata",
+      });
+    }
+
+    // STRICT REQUIREMENTS - FAIL IF MISSING
+    if (!metadata.image || !metadata.name) {
+      console.error("❌ FAILED: Missing required image or name");
+      return res.status(400).json({
+        success: false,
+        error: "NFT image and name are REQUIRED for paid NFTs",
       });
     }
 
@@ -48,7 +57,7 @@ export default async function handler(req, res) {
     const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
     console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString());
 
-    // Check balance - reduced threshold
+    // Check balance
     const balanceBefore = await connection.getBalance(creatorKeypair.publicKey);
     if (balanceBefore < 0.001 * 1e9) {
       return res.status(500).json({
@@ -57,15 +66,37 @@ export default async function handler(req, res) {
       });
     }
 
-    // Step 1: Upload metadata to IPFS FIRST
-    console.log("📤 Step 1: Uploading metadata to IPFS...");
+    // Step 1: VERIFY METAPLEX IMPORTS FIRST - FAIL IF NOT AVAILABLE
+    console.log("🔍 Step 1: VERIFYING Metaplex imports - REQUIRED FOR METADATA...");
+    
+    let createCreateMetadataAccountV3Instruction, METADATA_PROGRAM_ID;
+    try {
+      const metaplexLib = await import("@metaplex-foundation/mpl-token-metadata");
+      createCreateMetadataAccountV3Instruction = metaplexLib.createCreateMetadataAccountV3Instruction;
+      METADATA_PROGRAM_ID = metaplexLib.PROGRAM_ID;
+      
+      if (!createCreateMetadataAccountV3Instruction || !METADATA_PROGRAM_ID) {
+        throw new Error("Metaplex functions not available");
+      }
+      
+      console.log("✅ Metaplex imports verified - proceeding");
+    } catch (metaplexImportError) {
+      console.error("❌ FAILED: Metaplex imports failed:", metaplexImportError.message);
+      return res.status(500).json({
+        success: false,
+        error: "Metadata system unavailable - transaction cancelled",
+      });
+    }
+
+    // Step 2: UPLOAD METADATA TO IPFS - REQUIRED TO SUCCEED
+    console.log("📤 Step 2: Uploading metadata to IPFS - REQUIRED...");
     
     let metadataUri;
     try {
       const nftMetadata = {
-        name: metadata.name || "WordPress NFT",
+        name: metadata.name,
         description: metadata.description || "NFT created via WordPress store",
-        image: metadata.image || "https://via.placeholder.com/512x512.png?text=WordPress+NFT",
+        image: metadata.image,
         attributes: [
           { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
           { trait_type: "Platform", value: "WordPress" },
@@ -75,7 +106,7 @@ export default async function handler(req, res) {
         properties: {
           files: [
             {
-              uri: metadata.image || "https://via.placeholder.com/512x512.png?text=WordPress+NFT",
+              uri: metadata.image,
               type: "image/png"
             }
           ],
@@ -106,19 +137,15 @@ export default async function handler(req, res) {
       console.log("✅ Metadata uploaded to IPFS:", metadataUri);
 
     } catch (ipfsError) {
-      console.error("❌ IPFS upload failed:", ipfsError.message);
-      // Continue with a fallback metadata URI
-      metadataUri = `data:application/json;base64,${Buffer.from(JSON.stringify({
-        name: metadata.name || "WordPress NFT",
-        description: metadata.description || "NFT created via WordPress",
-        image: metadata.image || "",
-        attributes: []
-      })).toString('base64')}`;
-      console.log("⚠️ Using fallback metadata URI");
+      console.error("❌ FAILED: IPFS upload failed:", ipfsError.message);
+      return res.status(500).json({
+        success: false,
+        error: "Metadata upload failed - transaction cancelled",
+      });
     }
 
-    // Step 2: Create mint
-    console.log("⚡ Step 2: Creating mint...");
+    // Step 3: CREATE MINT - Only after verifying everything will work
+    console.log("⚡ Step 3: Creating mint...");
     const mint = await createMint(
       connection,
       creatorKeypair,
@@ -129,26 +156,10 @@ export default async function handler(req, res) {
 
     console.log("🔑 Mint created:", mint.toString());
 
-    // Step 3: Try to create metadata account with better error handling
-    console.log("📝 Step 3: Attempting to create Metaplex metadata account...");
+    // Step 4: CREATE METADATA ACCOUNT - MUST SUCCEED OR COMPLETE FAILURE
+    console.log("📝 Step 4: Creating Metaplex metadata account - REQUIRED...");
     
-    let metadataCreated = false;
     try {
-      // Try dynamic import with explicit error handling
-      console.log("🔄 Importing Metaplex libraries...");
-      
-      const metaplexLib = await import("@metaplex-foundation/mpl-token-metadata");
-      console.log("✅ Metaplex library imported successfully");
-      
-      const createCreateMetadataAccountV3Instruction = metaplexLib.createCreateMetadataAccountV3Instruction;
-      const METADATA_PROGRAM_ID = metaplexLib.PROGRAM_ID;
-      
-      console.log("📍 METADATA_PROGRAM_ID:", METADATA_PROGRAM_ID.toString());
-      
-      if (!createCreateMetadataAccountV3Instruction || !METADATA_PROGRAM_ID) {
-        throw new Error("Required Metaplex functions not found");
-      }
-
       // Find metadata account PDA
       const [metadataAccount] = PublicKey.findProgramAddressSync(
         [
@@ -173,7 +184,7 @@ export default async function handler(req, res) {
         {
           createMetadataAccountArgsV3: {
             data: {
-              name: metadata.name || "WordPress NFT",
+              name: metadata.name,
               symbol: "WP",
               uri: metadataUri,
               sellerFeeBasisPoints: 0,
@@ -200,16 +211,20 @@ export default async function handler(req, res) {
       await connection.confirmTransaction(metadataSignature);
       
       console.log("✅ Metadata account created! Signature:", metadataSignature);
-      metadataCreated = true;
 
     } catch (metaplexError) {
-      console.error("❌ Metaplex metadata creation failed:", metaplexError.message);
-      console.log("⚠️ Continuing with basic SPL token - customers will get refund option");
-      metadataCreated = false;
+      console.error("❌ FAILED: Metadata creation failed:", metaplexError.message);
+      
+      // CRITICAL FAILURE - The mint exists but has no metadata
+      // This is unacceptable for paying customers
+      return res.status(500).json({
+        success: false,
+        error: "Metadata creation failed - NFT incomplete. Contact support for refund with mint: " + mint.toString(),
+      });
     }
 
-    // Step 4: Mint token to recipient
-    console.log("🚀 Step 4: Minting token to recipient...");
+    // Step 5: MINT TOKEN TO RECIPIENT - Only if everything succeeded
+    console.log("🚀 Step 5: Minting token to recipient...");
     const recipientPubkey = new PublicKey(walletAddress);
     const tokenAccount = await getOrCreateAssociatedTokenAccount(
       connection,
@@ -231,25 +246,19 @@ export default async function handler(req, res) {
     const balanceAfter = await connection.getBalance(creatorKeypair.publicKey);
     const totalCostSOL = (balanceBefore - balanceAfter) / 1e9;
 
-    console.log("🎉 === NFT CREATION COMPLETE ===");
+    console.log("🎉 === COMPLETE NFT WITH FULL METADATA CREATED ===");
     console.log("🔗 Mint address:", mint.toString());
     console.log("📝 Mint signature:", mintSignature);
     console.log("🌐 Metadata URI:", metadataUri);
     console.log("💰 Total cost:", totalCostSOL, "SOL");
-    console.log("📊 Metadata created:", metadataCreated);
-
-    const responseMessage = metadataCreated 
-      ? "Complete NFT with metadata created on Solana mainnet!"
-      : "NFT created but metadata failed - contact support for assistance";
 
     return res.status(200).json({
       success: true,
       mintAddress: mint.toString(),
       transactionSignature: mintSignature,
       metadataUri: metadataUri,
-      metadataCreated: metadataCreated,
       explorerUrl: `https://explorer.solana.com/address/${mint.toString()}`,
-      message: responseMessage,
+      message: "COMPLETE NFT with full metadata created successfully!",
       costs: {
         totalSOL: totalCostSOL,
         totalUSD: totalCostSOL * 165
@@ -257,10 +266,10 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error("❌ NFT creation error:", error);
+    console.error("❌ COMPLETE FAILURE:", error);
     return res.status(500).json({
       success: false,
-      error: error.message,
+      error: "NFT creation failed: " + error.message,
     });
   }
 }
