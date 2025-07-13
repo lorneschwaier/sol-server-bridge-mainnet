@@ -1,3 +1,10 @@
+// Fix Buffer polyfill for Vercel Edge Runtime
+import { Buffer } from 'buffer';
+globalThis.Buffer = Buffer;
+if (typeof global !== 'undefined') {
+  global.Buffer = Buffer;
+}
+
 // Vercel Serverless Function for NFT Minting
 export default async function handler(req, res) {
   // CORS headers
