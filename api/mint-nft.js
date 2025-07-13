@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata } = req.body;
 
-    console.log("🎨 === SIMPLE NFT CREATION ===");
+    console.log("🎨 === FIXED NFT CREATION ===");
     console.log("👤 Wallet:", walletAddress);
 
     if (!walletAddress || !metadata) {
@@ -23,9 +23,16 @@ export default async function handler(req, res) {
       });
     }
 
-    // Import basic Solana libraries
-    const { Connection, PublicKey, Keypair, clusterApiUrl } = await import("@solana/web3.js");
-    const { createMint, getOrCreateAssociatedTokenAccount, mintTo, TOKEN_PROGRAM_ID } = await import("@solana/spl-token");
+    // Import Solana libraries
+    const { Connection, PublicKey, Keypair, SystemProgram, Transaction } = await import("@solana/web3.js");
+    const { 
+      createMint, 
+      getOrCreateAssociatedTokenAccount, 
+      mintTo, 
+      TOKEN_PROGRAM_ID,
+      createAssociatedTokenAccountInstruction,
+      getAssociatedTokenAddress
+    } = await import("@solana/spl-token");
     const bs58 = (await import("bs58")).default;
 
     // Initialize connection
@@ -53,9 +60,12 @@ export default async function handler(req, res) {
       });
     }
 
-    // Create keypair
+    // Create keypairs - USE FRESH KEYPAIR FOR MINT
     const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
+    const mintKeypair = Keypair.generate(); // NEW MINT KEYPAIR
+    
     console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString());
+    console.log("🔑 New mint keypair generated:", mintKeypair.publicKey.toString());
 
     // Check balance
     const balance = await connection.getBalance(creatorKeypair.publicKey);
@@ -68,50 +78,87 @@ export default async function handler(req, res) {
       });
     }
 
-    // Create mint (this acts as the NFT)
-    console.log("⚡ Creating NFT mint...");
-    const mint = await createMint(
-      connection,
-      creatorKeypair,
-      creatorKeypair.publicKey,
-      creatorKeypair.publicKey,
-      0 // 0 decimals for NFT
+    // Create the mint account manually to avoid conflicts
+    console.log("⚡ Creating NFT mint account...");
+    
+    const lamports = await connection.getMinimumBalanceForRentExemption(82); // Mint account size
+    
+    const transaction = new Transaction();
+    
+    // Create mint account
+    transaction.add(
+      SystemProgram.createAccount({
+        fromPubkey: creatorKeypair.publicKey,
+        newAccountPubkey: mintKeypair.publicKey,
+        lamports,
+        space: 82,
+        programId: TOKEN_PROGRAM_ID,
+      })
     );
 
-    console.log("🔑 NFT mint created:", mint.toString());
+    // Initialize mint
+    const { createInitializeMintInstruction } = await import("@solana/spl-token");
+    transaction.add(
+      createInitializeMintInstruction(
+        mintKeypair.publicKey,
+        0, // 0 decimals for NFT
+        creatorKeypair.publicKey,
+        creatorKeypair.publicKey,
+        TOKEN_PROGRAM_ID
+      )
+    );
 
-    // Get or create token account for the recipient
+    // Get recipient's associated token address
     const recipientPubkey = new PublicKey(walletAddress);
-    const tokenAccount = await getOrCreateAssociatedTokenAccount(
-      connection,
-      creatorKeypair,
-      mint,
+    const associatedTokenAddress = await getAssociatedTokenAddress(
+      mintKeypair.publicKey,
       recipientPubkey
     );
 
-    // Mint 1 token to the recipient (making it an NFT)
-    const mintResult = await mintTo(
-      connection,
-      creatorKeypair,
-      mint,
-      tokenAccount.address,
-      creatorKeypair.publicKey,
-      1 // Mint exactly 1 token
+    // Create associated token account for recipient
+    transaction.add(
+      createAssociatedTokenAccountInstruction(
+        creatorKeypair.publicKey, // payer
+        associatedTokenAddress,   // associated token account
+        recipientPubkey,          // owner
+        mintKeypair.publicKey     // mint
+      )
     );
 
-    console.log("🎉 === NFT MINTED SUCCESSFULLY! ===");
-    console.log("🔗 Mint address:", mint.toString());
-    console.log("📝 Transaction signature:", mintResult);
+    // Mint 1 token to recipient
+    const { createMintToInstruction } = await import("@solana/spl-token");
+    transaction.add(
+      createMintToInstruction(
+        mintKeypair.publicKey,    // mint
+        associatedTokenAddress,   // destination
+        creatorKeypair.publicKey, // authority
+        1                         // amount (1 for NFT)
+      )
+    );
 
-    const explorerUrl = `https://explorer.solana.com/address/${mint.toString()}`;
+    // Sign and send transaction
+    const signature = await connection.sendTransaction(
+      transaction, 
+      [creatorKeypair, mintKeypair], // Both keypairs needed
+      { skipPreflight: false }
+    );
+
+    // Wait for confirmation
+    await connection.confirmTransaction(signature);
+
+    console.log("🎉 === NFT MINTED SUCCESSFULLY! ===");
+    console.log("🔗 Mint address:", mintKeypair.publicKey.toString());
+    console.log("📝 Transaction signature:", signature);
+
+    const explorerUrl = `https://explorer.solana.com/address/${mintKeypair.publicKey.toString()}`;
 
     return res.status(200).json({
       success: true,
-      mintAddress: mint.toString(),
-      transactionSignature: mintResult,
+      mintAddress: mintKeypair.publicKey.toString(),
+      transactionSignature: signature,
       explorerUrl: explorerUrl,
       network: "mainnet-beta",
-      method: "spl_token_mint",
+      method: "manual_spl_token_creation",
       message: "REAL NFT minted successfully on Solana mainnet!",
     });
 
