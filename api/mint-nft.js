@@ -81,7 +81,7 @@ export default async function handler(req, res) {
     const balanceBefore = await connection.getBalance(creatorKeypair.publicKey);
     console.log("💰 Creator wallet balance BEFORE:", balanceBefore / 1e9, "SOL");
 
-    if (balanceBefore < 0.005 * 1e9) {  // 0.005 SOL = ~$0.83
+    if (balanceBefore < 0.003 * 1e9) {  // 0.003 SOL = ~$0.50
       return res.status(500).json({
         success: false,
         error: `Insufficient SOL in creator wallet. Balance: ${balanceBefore / 1e9} SOL.`
