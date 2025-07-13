@@ -106,3 +106,11 @@ export default async function handler(req, res) {
     return res.status(500).json({ success: false, error: error.message });
   }
 }
+// Add this at the very top of your mint-nft.js file
+import { Buffer } from 'buffer';
+if (typeof globalThis !== 'undefined' && !globalThis.Buffer) {
+    globalThis.Buffer = Buffer;
+}
+if (typeof global !== 'undefined' && !global.Buffer) {
+    global.Buffer = Buffer;
+}
