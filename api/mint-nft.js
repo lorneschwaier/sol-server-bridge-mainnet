@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     }
 
     // 🔐 Load your private key from Vercel env
-    const secretKey = JSON.parse(process.env.SOLANA_PRIVATE_KEY);
+    const secretKey = JSON.parse(process.env.CREATOR_PRIVATE_KEY);
     const umi = createUmi(process.env.SOLANA_RPC_URL);
     const payer = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(secretKey));
     umi.use(keypairIdentity(payer));
