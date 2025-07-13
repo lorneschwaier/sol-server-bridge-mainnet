@@ -74,19 +74,31 @@ export default async function handler(req, res) {
       console.log("📦 Importing Metaplex library...");
       const metaplexLib = await import("@metaplex-foundation/mpl-token-metadata");
       
-      console.log("📋 Available functions:", Object.keys(metaplexLib));
+      console.log("📋 Available functions:", Object.keys(metaplexLib).slice(0, 10));
       
-      createCreateMetadataAccountV3Instruction = metaplexLib.createCreateMetadataAccountV3Instruction;
-      METADATA_PROGRAM_ID = metaplexLib.PROGRAM_ID;
+      // Try multiple possible function names
+      createCreateMetadataAccountV3Instruction = 
+        metaplexLib.createCreateMetadataAccountV3Instruction ||
+        metaplexLib.createCreateMetadataAccountInstruction ||
+        metaplexLib.CreateMetadataAccountV3 ||
+        metaplexLib.CreateMetadataAccount;
+        
+      // Try multiple possible PROGRAM_ID names
+      METADATA_PROGRAM_ID = 
+        metaplexLib.PROGRAM_ID ||
+        metaplexLib.MPL_TOKEN_METADATA_PROGRAM_ID ||
+        metaplexLib.TOKEN_METADATA_PROGRAM_ID;
       
       console.log("🔍 createCreateMetadataAccountV3Instruction:", typeof createCreateMetadataAccountV3Instruction);
       console.log("🔍 METADATA_PROGRAM_ID:", METADATA_PROGRAM_ID ? METADATA_PROGRAM_ID.toString() : "undefined");
       
       if (typeof createCreateMetadataAccountV3Instruction !== 'function') {
+        console.log("❌ Function not found, available functions:", Object.keys(metaplexLib).filter(key => key.toLowerCase().includes('metadata')));
         throw new Error("createCreateMetadataAccountV3Instruction is not a function");
       }
       
       if (!METADATA_PROGRAM_ID || typeof METADATA_PROGRAM_ID.toBuffer !== 'function') {
+        console.log("❌ PROGRAM_ID not found, available PROGRAM_IDs:", Object.keys(metaplexLib).filter(key => key.includes('PROGRAM')));
         throw new Error("METADATA_PROGRAM_ID is invalid or missing toBuffer method");
       }
       
