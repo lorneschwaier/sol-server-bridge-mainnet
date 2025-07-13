@@ -5,14 +5,14 @@ import { Connection, PublicKey, Keypair } from '@solana/web3.js';
 import { fromWeb3JsPublicKey, toWeb3JsKeypair } from '@metaplex-foundation/umi-web3js-adapters';
 import axios from 'axios';
 import bs58 from 'bs58';
+import { Buffer } from 'buffer';
 
 // Polyfill Buffer for Vercel environment
-import { Buffer } from 'buffer';
 globalThis.Buffer = Buffer;
 
 export default async function handler(req, res) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Set CORS headers for cross-origin requests
+  res.setHeader('Access-Control-Allow-Origin', '*');  // Or specify your domain
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
@@ -23,7 +23,7 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata } = req.body;
 
-    // Validate input
+    // Validate input data
     if (!walletAddress || !metadata || !metadata.image || !metadata.name) {
       return res.status(400).json({
         success: false,
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
       'confirmed'
     );
 
-    // Load creator keypair
+    // Load creator's private key and validate
     let privateKeyArray;
     try {
       const privateKey = process.env.CREATOR_PRIVATE_KEY?.trim();
@@ -57,7 +57,7 @@ export default async function handler(req, res) {
     const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
     console.log('✅ Creator wallet loaded:', creatorKeypair.publicKey.toString());
 
-    // Check creator balance
+    // Check creator's SOL balance before proceeding
     const balanceBefore = await connection.getBalance(creatorKeypair.publicKey);
     if (balanceBefore < 0.001 * 1e9) {
       return res.status(500).json({
@@ -66,7 +66,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Step 1: Upload metadata to IPFS
+    // Step 1: Upload metadata to IPFS using Pinata
     console.log('📤 Step 1: Uploading metadata to IPFS...');
     let metadataUri;
     try {
