@@ -66,20 +66,31 @@ export default async function handler(req, res) {
       });
     }
 
-    // Step 1: VERIFY METAPLEX IMPORTS FIRST - FAIL IF NOT AVAILABLE
-    console.log("🔍 Step 1: VERIFYING Metaplex imports - REQUIRED FOR METADATA...");
+    // Step 1: VERIFY METAPLEX IMPORTS - Fixed verification logic
+    console.log("🔍 Step 1: VERIFYING Metaplex imports...");
     
     let createCreateMetadataAccountV3Instruction, METADATA_PROGRAM_ID;
     try {
+      console.log("📦 Importing Metaplex library...");
       const metaplexLib = await import("@metaplex-foundation/mpl-token-metadata");
+      
+      console.log("📋 Available functions:", Object.keys(metaplexLib));
+      
       createCreateMetadataAccountV3Instruction = metaplexLib.createCreateMetadataAccountV3Instruction;
       METADATA_PROGRAM_ID = metaplexLib.PROGRAM_ID;
       
-      if (!createCreateMetadataAccountV3Instruction || !METADATA_PROGRAM_ID) {
-        throw new Error("Metaplex functions not available");
+      console.log("🔍 createCreateMetadataAccountV3Instruction:", typeof createCreateMetadataAccountV3Instruction);
+      console.log("🔍 METADATA_PROGRAM_ID:", METADATA_PROGRAM_ID ? METADATA_PROGRAM_ID.toString() : "undefined");
+      
+      if (typeof createCreateMetadataAccountV3Instruction !== 'function') {
+        throw new Error("createCreateMetadataAccountV3Instruction is not a function");
       }
       
-      console.log("✅ Metaplex imports verified - proceeding");
+      if (!METADATA_PROGRAM_ID || typeof METADATA_PROGRAM_ID.toBuffer !== 'function') {
+        throw new Error("METADATA_PROGRAM_ID is invalid or missing toBuffer method");
+      }
+      
+      console.log("✅ Metaplex imports verified successfully");
     } catch (metaplexImportError) {
       console.error("❌ FAILED: Metaplex imports failed:", metaplexImportError.message);
       return res.status(500).json({
@@ -214,6 +225,7 @@ export default async function handler(req, res) {
 
     } catch (metaplexError) {
       console.error("❌ FAILED: Metadata creation failed:", metaplexError.message);
+      console.error("❌ Metadata Error Details:", metaplexError);
       
       // CRITICAL FAILURE - The mint exists but has no metadata
       // This is unacceptable for paying customers
