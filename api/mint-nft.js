@@ -13,9 +13,8 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata } = req.body;
 
-    console.log("🎨 === NFT WITH METADATA CREATION ===");
+    console.log("🎨 === NFT WITH COST TRACKING ===");
     console.log("👤 Recipient:", walletAddress);
-    console.log("📋 Metadata:", metadata);
 
     if (!walletAddress || !metadata) {
       return res.status(400).json({
@@ -25,18 +24,9 @@ export default async function handler(req, res) {
     }
 
     // Import required libraries
-    const { Connection, PublicKey, Keypair, Transaction, SystemProgram } = await import("@solana/web3.js");
-    const { 
-      createMint, 
-      getOrCreateAssociatedTokenAccount, 
-      mintTo,
-      TOKEN_PROGRAM_ID,
-      createInitializeMintInstruction,
-      MINT_SIZE,
-      getMinimumBalanceForRentExemptMint
-    } = await import("@solana/spl-token");
+    const { Connection, PublicKey, Keypair } = await import("@solana/web3.js");
+    const { createMint, getOrCreateAssociatedTokenAccount, mintTo } = await import("@solana/spl-token");
     const bs58 = (await import("bs58")).default;
-    const axios = (await import("axios")).default;
 
     // Initialize connection
     const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
@@ -67,222 +57,86 @@ export default async function handler(req, res) {
       });
     }
 
-    // Create keypairs
+    // Create creator keypair
     const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
-    const mintKeypair = Keypair.generate();
     
     console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString());
-    console.log("🔑 Mint keypair generated:", mintKeypair.publicKey.toString());
 
-    // Check balance
-    const balance = await connection.getBalance(creatorKeypair.publicKey);
-    console.log("💰 Creator wallet balance:", balance / 1e9, "SOL");
+    // COST TRACKING - Check balance before
+    const balanceBefore = await connection.getBalance(creatorKeypair.publicKey);
+    console.log("💰 Creator wallet balance BEFORE:", balanceBefore / 1e9, "SOL");
 
-    if (balance < 0.01 * 1e9) {
+    if (balanceBefore < 0.01 * 1e9) {
       return res.status(500).json({
         success: false,
-        error: `Insufficient SOL in creator wallet. Balance: ${balance / 1e9} SOL.`
+        error: `Insufficient SOL in creator wallet. Balance: ${balanceBefore / 1e9} SOL.`
       });
     }
 
-    // Step 1: Upload metadata to IPFS (using Pinata)
-    console.log("📤 Step 1: Uploading metadata to IPFS...");
-    
-    let metadataUri;
-    if (process.env.PINATA_API_KEY && process.env.PINATA_SECRET_KEY) {
-      try {
-        const pinataResponse = await axios.post(
-          "https://api.pinata.cloud/pinning/pinJSONToIPFS",
-          {
-            pinataContent: {
-              name: metadata.name || "Unnamed NFT",
-              description: metadata.description || "NFT created via WordPress",
-              image: metadata.image || "",
-              attributes: metadata.attributes || [
-                { trait_type: "Product ID", value: metadata.product_id || "unknown" },
-                { trait_type: "Minted Date", value: new Date().toISOString() }
-              ]
-            },
-            pinataMetadata: {
-              name: `nft-metadata-${Date.now()}.json`,
-            },
-          },
-          {
-            headers: {
-              pinata_api_key: process.env.PINATA_API_KEY,
-              pinata_secret_api_key: process.env.PINATA_SECRET_KEY,
-            },
-            timeout: 30000,
-          }
-        );
-
-        metadataUri = `https://gateway.pinata.cloud/ipfs/${pinataResponse.data.IpfsHash}`;
-        console.log("✅ Metadata uploaded to IPFS:", metadataUri);
-      } catch (ipfsError) {
-        console.log("⚠️ IPFS upload failed, using fallback metadata");
-        metadataUri = `data:application/json;base64,${Buffer.from(JSON.stringify({
-          name: metadata.name || "WordPress NFT",
-          description: metadata.description || "NFT created via WordPress",
-          image: metadata.image || "",
-          attributes: metadata.attributes || []
-        })).toString('base64')}`;
-      }
-    } else {
-      // Fallback to base64 encoded metadata
-      metadataUri = `data:application/json;base64,${Buffer.from(JSON.stringify({
-        name: metadata.name || "WordPress NFT",
-        description: metadata.description || "NFT created via WordPress",
-        image: metadata.image || "",
-        attributes: metadata.attributes || []
-      })).toString('base64')}`;
-    }
-
-    // Step 2: Create mint account
-    console.log("⚡ Step 2: Creating mint account...");
-    
-    const lamports = await getMinimumBalanceForRentExemptMint(connection);
-    
-    const transaction = new Transaction();
-    
-    // Create mint account
-    transaction.add(
-      SystemProgram.createAccount({
-        fromPubkey: creatorKeypair.publicKey,
-        newAccountPubkey: mintKeypair.publicKey,
-        lamports,
-        space: MINT_SIZE,
-        programId: TOKEN_PROGRAM_ID,
-      })
+    // Create mint - this is where the main cost happens
+    console.log("⚡ Creating NFT mint with cost tracking...");
+    const mint = await createMint(
+      connection,
+      creatorKeypair,           // payer (this account pays fees)
+      creatorKeypair.publicKey, // mint authority
+      creatorKeypair.publicKey, // freeze authority
+      0                         // 0 decimals for NFT
     );
 
-    // Initialize mint
-    transaction.add(
-      createInitializeMintInstruction(
-        mintKeypair.publicKey,
-        0, // 0 decimals for NFT
-        creatorKeypair.publicKey,
-        creatorKeypair.publicKey,
-        TOKEN_PROGRAM_ID
-      )
-    );
+    console.log("🔑 NFT mint created:", mint.toString());
 
-    // Step 3: Create metadata account (if we have Metaplex)
-    console.log("📝 Step 3: Adding metadata (attempting Metaplex)...");
-    
-    try {
-      // Try to use Metaplex Token Metadata
-      const { 
-        createCreateMetadataAccountV3Instruction,
-        PROGRAM_ID as METADATA_PROGRAM_ID 
-      } = await import("@metaplex-foundation/mpl-token-metadata");
-
-      const [metadataAddress] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("metadata"),
-          METADATA_PROGRAM_ID.toBuffer(),
-          mintKeypair.publicKey.toBuffer(),
-        ],
-        METADATA_PROGRAM_ID
-      );
-
-      transaction.add(
-        createCreateMetadataAccountV3Instruction(
-          {
-            metadata: metadataAddress,
-            mint: mintKeypair.publicKey,
-            mintAuthority: creatorKeypair.publicKey,
-            payer: creatorKeypair.publicKey,
-            updateAuthority: creatorKeypair.publicKey,
-          },
-          {
-            createMetadataAccountArgsV3: {
-              data: {
-                name: metadata.name || "WordPress NFT",
-                symbol: "WP",
-                uri: metadataUri,
-                sellerFeeBasisPoints: 0,
-                creators: [
-                  {
-                    address: creatorKeypair.publicKey,
-                    verified: true,
-                    share: 100,
-                  },
-                ],
-                collection: null,
-                uses: null,
-              },
-              isMutable: true,
-              collectionDetails: null,
-            },
-          }
-        )
-      );
-
-      console.log("✅ Metaplex metadata instruction added");
-    } catch (metaplexError) {
-      console.log("⚠️ Metaplex not available, proceeding with basic SPL token");
-    }
-
-    // Step 4: Create associated token account and mint
+    // Get or create token account for the recipient
     const recipientPubkey = new PublicKey(walletAddress);
-    const { getAssociatedTokenAddress, createAssociatedTokenAccountInstruction } = await import("@solana/spl-token");
-    
-    const associatedTokenAddress = await getAssociatedTokenAddress(
-      mintKeypair.publicKey,
-      recipientPubkey
+    const tokenAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      creatorKeypair,    // payer
+      mint,              // mint
+      recipientPubkey    // owner
     );
 
-    transaction.add(
-      createAssociatedTokenAccountInstruction(
-        creatorKeypair.publicKey,
-        associatedTokenAddress,
-        recipientPubkey,
-        mintKeypair.publicKey
-      )
+    // Mint 1 token to the recipient
+    const mintResult = await mintTo(
+      connection,
+      creatorKeypair,           // payer
+      mint,                     // mint
+      tokenAccount.address,     // destination
+      creatorKeypair.publicKey, // authority
+      1                         // amount (1 for NFT)
     );
 
-    // Mint 1 token to recipient
-    const { createMintToInstruction } = await import("@solana/spl-token");
-    transaction.add(
-      createMintToInstruction(
-        mintKeypair.publicKey,
-        associatedTokenAddress,
-        creatorKeypair.publicKey,
-        1
-      )
-    );
+    // COST TRACKING - Check balance after
+    const balanceAfter = await connection.getBalance(creatorKeypair.publicKey);
+    const totalCostSOL = (balanceBefore - balanceAfter) / 1e9;
+    const totalCostUSD = totalCostSOL * 165; // Approximate SOL price
 
-    // Sign and send transaction
-    console.log("📡 Step 4: Sending transaction to Solana...");
-    const signature = await connection.sendTransaction(
-      transaction, 
-      [creatorKeypair, mintKeypair],
-      { skipPreflight: false }
-    );
+    console.log("💰 Creator wallet balance AFTER:", balanceAfter / 1e9, "SOL");
+    console.log("💳 TOTAL NFT MINTING COST:", totalCostSOL, "SOL");
+    console.log("💵 TOTAL NFT MINTING COST:", `~$${totalCostUSD.toFixed(4)} USD`);
 
-    // Wait for confirmation
-    await connection.confirmTransaction(signature);
+    console.log("🎉 === NFT MINTED SUCCESSFULLY WITH COST TRACKING! ===");
+    console.log("🔗 Mint address:", mint.toString());
+    console.log("📝 Transaction signature:", mintResult);
 
-    console.log("🎉 === NFT WITH METADATA MINTED SUCCESSFULLY! ===");
-    console.log("🔗 Mint address:", mintKeypair.publicKey.toString());
-    console.log("📝 Transaction signature:", signature);
-    console.log("🌐 Metadata URI:", metadataUri);
-
-    const explorerUrl = `https://explorer.solana.com/address/${mintKeypair.publicKey.toString()}`;
+    const explorerUrl = `https://explorer.solana.com/address/${mint.toString()}`;
 
     return res.status(200).json({
       success: true,
-      mintAddress: mintKeypair.publicKey.toString(),
-      transactionSignature: signature,
-      metadataUri: metadataUri,
+      mintAddress: mint.toString(),
+      transactionSignature: mintResult,
       explorerUrl: explorerUrl,
       network: "mainnet-beta",
-      method: "spl_token_with_metadata",
-      message: "REAL NFT with metadata minted successfully on Solana mainnet!",
+      method: "spl_token_with_cost_tracking",
+      message: "REAL NFT minted successfully on Solana mainnet!",
+      costs: {
+        totalSOL: totalCostSOL,
+        totalUSD: totalCostUSD,
+        beforeBalance: balanceBefore / 1e9,
+        afterBalance: balanceAfter / 1e9
+      }
     });
 
   } catch (error) {
-    console.error("❌ NFT with metadata mint error:", error);
+    console.error("❌ NFT mint error:", error);
     return res.status(500).json({
       success: false,
       error: error.message,
