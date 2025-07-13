@@ -79,11 +79,14 @@ export default async function handler(req, res) {
       // Use the CORRECT function names from the debug output
       createCreateMetadataAccountV3Instruction = metaplexLib.createMetadataAccountV3;
         
-      // Use the CORRECT PROGRAM_ID name
-      METADATA_PROGRAM_ID = metaplexLib.MPL_TOKEN_METADATA_PROGRAM_ID;
+      // Use the CORRECT PROGRAM_ID name and convert to PublicKey if needed
+      const programIdValue = metaplexLib.MPL_TOKEN_METADATA_PROGRAM_ID;
+      METADATA_PROGRAM_ID = typeof programIdValue === 'string' ? new PublicKey(programIdValue) : programIdValue;
       
       console.log("🔍 createMetadataAccountV3:", typeof createCreateMetadataAccountV3Instruction);
-      console.log("🔍 MPL_TOKEN_METADATA_PROGRAM_ID:", METADATA_PROGRAM_ID ? METADATA_PROGRAM_ID.toString() : "undefined");
+      console.log("🔍 MPL_TOKEN_METADATA_PROGRAM_ID type:", typeof programIdValue);
+      console.log("🔍 MPL_TOKEN_METADATA_PROGRAM_ID value:", programIdValue);
+      console.log("🔍 Final METADATA_PROGRAM_ID:", METADATA_PROGRAM_ID ? METADATA_PROGRAM_ID.toString() : "undefined");
       
       if (typeof createCreateMetadataAccountV3Instruction !== 'function') {
         console.log("❌ Function not found, available functions:", Object.keys(metaplexLib).filter(key => key.toLowerCase().includes('metadata')));
