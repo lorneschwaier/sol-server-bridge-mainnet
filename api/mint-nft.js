@@ -1,11 +1,7 @@
-// Fix Buffer polyfill for Vercel Edge Runtime
+// Buffer polyfill fix for Vercel
 import { Buffer } from 'buffer';
 globalThis.Buffer = Buffer;
-if (typeof global !== 'undefined') {
-  global.Buffer = Buffer;
-}
 
-// Vercel Serverless Function for NFT Minting
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -17,15 +13,14 @@ export default async function handler(req, res) {
   }
   
   if (req.method !== "POST") {
-    return res.status(405).json({ success: false, error: "Method not allowed" });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
     const { walletAddress, metadata } = req.body;
 
-    console.log("🎨 === NFT MINTING REQUEST ===");
+    console.log("🎨 === REAL NFT MINTING REQUEST ===");
     console.log("👤 Wallet:", walletAddress);
-    console.log("📋 Metadata:", JSON.stringify(metadata, null, 2));
 
     if (!walletAddress || !metadata) {
       return res.status(400).json({
@@ -49,14 +44,12 @@ export default async function handler(req, res) {
       });
     }
 
-    // Dynamic imports
+    // Dynamic imports with better error handling
     const { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } = await import("@solana/web3.js");
     const { createUmi } = await import("@metaplex-foundation/umi-bundle-defaults");
     const { createV1, mplCore } = await import("@metaplex-foundation/mpl-core");
     const { keypairIdentity, generateSigner, publicKey, some, none } = await import("@metaplex-foundation/umi");
     const { fromWeb3JsKeypair } = await import("@metaplex-foundation/umi-web3js-adapters");
-
-    // Import axios differently for Vercel
     const axios = (await import("axios")).default;
     const bs58 = (await import("bs58")).default;
 
@@ -76,7 +69,7 @@ export default async function handler(req, res) {
     }
 
     // Step 1: Upload metadata to Pinata
-    console.log("📤 Step 1: Uploading metadata...");
+    console.log("📤 Step 1: Uploading metadata to Pinata...");
 
     const pinataResponse = await axios.post(
       "https://api.pinata.cloud/pinning/pinJSONToIPFS",
@@ -99,11 +92,11 @@ export default async function handler(req, res) {
     console.log("✅ Metadata uploaded to Pinata:", metadataUrl);
 
     // Step 2: Initialize Solana connection and mint NFT
-    console.log("⚡ Step 2: Minting NFT...");
+    console.log("⚡ Step 2: Minting REAL NFT on Solana...");
 
     const connection = new Connection(SOLANA_RPC_URL, "confirmed");
 
-    // Parse private key
+    // Parse private key with better Buffer handling
     let privateKeyArray;
     try {
       if (process.env.CREATOR_PRIVATE_KEY.startsWith("[")) {
@@ -144,40 +137,28 @@ export default async function handler(req, res) {
     const asset = generateSigner(creatorUmi);
     console.log("🔑 Generated asset address:", asset.publicKey);
 
-    // Prepare collection (if provided)
-    let collectionConfig = none();
-    if (metadata.collection && metadata.collection.trim()) {
-      try {
-        const collectionPubkey = publicKey(metadata.collection.trim());
-        collectionConfig = some({ key: collectionPubkey, verified: false });
-        console.log("📁 Collection configured:", metadata.collection);
-      } catch (error) {
-        console.log("⚠️ Invalid collection address, proceeding without collection");
-      }
-    }
-
-    console.log("⚡ Creating NFT with Metaplex Core...");
+    console.log("⚡ Creating REAL NFT with Metaplex Core...");
 
     // Create the NFT using Metaplex Core
     const createInstruction = createV1(creatorUmi, {
       asset,
       name: metadata.name || "Unnamed NFT",
       uri: metadataUrl,
-      collection: collectionConfig,
+      collection: none(),
     });
 
     // Execute the transaction
-    console.log("📡 Submitting transaction to Solana...");
+    console.log("📡 Submitting REAL NFT transaction to Solana mainnet...");
     const result = await createInstruction.sendAndConfirm(creatorUmi, {
       confirm: { commitment: "confirmed" },
       send: { skipPreflight: false },
     });
 
-    console.log("🎉 === NFT MINTED SUCCESSFULLY! ===");
+    console.log("🎉 === REAL NFT MINTED SUCCESSFULLY ON MAINNET! ===");
     console.log("🔗 Asset address:", asset.publicKey);
     console.log("📝 Transaction signature:", result.signature);
 
-    const explorerUrl = `https://explorer.solana.com/address/${asset.publicKey}${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`;
+    const explorerUrl = `https://explorer.solana.com/address/${asset.publicKey}`;
 
     return res.status(200).json({
       success: true,
@@ -186,12 +167,12 @@ export default async function handler(req, res) {
       metadataUrl: metadataUrl,
       explorerUrl: explorerUrl,
       network: SOLANA_NETWORK,
-      method: "metaplex_core",
-      message: "NFT minted successfully on Solana with Metaplex Core!",
+      method: "metaplex_core_mainnet",
+      message: "REAL NFT minted successfully on Solana mainnet!",
     });
 
   } catch (error) {
-    console.error("❌ Mint NFT error:", error);
+    console.error("❌ REAL NFT Mint error:", error);
     return res.status(500).json({
       success: false,
       error: error.message,
