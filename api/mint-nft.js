@@ -1,9 +1,6 @@
-// ✅ Polyfill Buffer for Vercel (Node SSR env)
-import { Buffer } from 'buffer';
-globalThis.Buffer = globalThis.Buffer || Buffer;
+// Required for buffer-based deps on Vercel
+globalThis.Buffer = globalThis.Buffer || require('buffer').Buffer;
 
-// ✅ Imports
-import { PublicKey } from '@solana/web3.js';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { createNft } from '@metaplex-foundation/mpl-token-metadata';
 import {
@@ -11,6 +8,8 @@ import {
   generateSigner
 } from '@metaplex-foundation/umi';
 import { fromWeb3JsPublicKey } from '@metaplex-foundation/umi-web3js-adapters';
+import { createSplAssociatedTokenProgram } from '@metaplex-foundation/mpl-toolbox';
+import { PublicKey } from '@solana/web3.js';
 
 export default async function handler(req, res) {
   // ✅ CORS headers
@@ -34,12 +33,15 @@ export default async function handler(req, res) {
     console.log('🔗 Using Solana RPC endpoint:', rpcEndpoint);
     const umi = createUmi(rpcEndpoint);
 
+    // ✅ Register required mainnet programs (splAssociatedToken)
+    umi.programs.add(createSplAssociatedTokenProgram());
+
     // 🔐 Load private key from env
     const secretKey = JSON.parse(process.env.CREATOR_PRIVATE_KEY);
     const payer = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(secretKey));
     umi.use(keypairIdentity(payer));
 
-    // 🧬 Mint signer and metadata
+    // 🎨 Mint NFT
     const mint = generateSigner(umi);
     const {
       name = 'X1XO NFT',
@@ -56,32 +58,28 @@ export default async function handler(req, res) {
       name,
       uri,
       symbol,
-      sellerFeeBasisPoints: 500, // 5% royalties
+      sellerFeeBasisPoints: 500,
       decimals: 0,
       isMutable: true,
       creators: [
         {
           address: payer.publicKey,
           verified: true,
-          share: 100
+          share: 100,
         }
       ],
       tokenOwner: fromWeb3JsPublicKey(new PublicKey(walletAddress))
-
     }).sendAndConfirm(umi);
 
     return res.status(200).json({
       success: true,
       mintAddress: mint.publicKey.toString(),
       transactionSignature: nft.signature.toString(),
-      message: '✅ NFT minted successfully!'
+      message: '✅ NFT minted successfully on Solana!'
     });
 
   } catch (error) {
     console.error('❌ Minting failed:', error);
-    return res.status(500).json({
-      success: false,
-      error: error?.message || 'Unknown error during minting'
-    });
+    return res.status(500).json({ success: false, error: error.message || 'Minting failed' });
   }
 }
