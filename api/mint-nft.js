@@ -1,3 +1,27 @@
+// Required for buffer-based deps
+globalThis.Buffer = globalThis.Buffer || require('buffer').Buffer
+
+export default async function handler(req, res) {
+  // ✅ Add CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "*")
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+
+  // ✅ Respond to OPTIONS request (preflight)
+  if (req.method === "OPTIONS") return res.status(200).end()
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, error: "Method not allowed" })
+  }
+
+  try {
+    // ... your minting logic ...
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message })
+  }
+}
+
+
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
 import { createNft, setAndVerifyCollection } from '@metaplex-foundation/mpl-token-metadata'
 import { keypairIdentity, generateSigner, percentAmount } from '@metaplex-foundation/umi'
