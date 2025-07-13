@@ -39,6 +39,7 @@ export default async function handler(req, res) {
       createMintToInstruction
     } = await import("@solana/spl-token");
     const bs58 = (await import("bs58")).default;
+    const axios = (await import("axios")).default;
 
     // Initialize connection
     const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
@@ -92,8 +93,6 @@ export default async function handler(req, res) {
     
     let metadataUri;
     try {
-      const axios = (await import("axios")).default;
-      
       const pinataResponse = await axios.post(
         "https://api.pinata.cloud/pinning/pinJSONToIPFS",
         {
@@ -131,8 +130,8 @@ export default async function handler(req, res) {
       })).toString('base64')}`;
     }
 
-    // Step 2: Create transaction with mint account, metadata, and token account
-    console.log("⚡ Step 2: Creating complete NFT transaction...");
+    // Step 2: Create transaction with mint account
+    console.log("⚡ Step 2: Creating NFT transaction...");
     
     const lamports = await getMinimumBalanceForRentExemptMint(connection);
     const transaction = new Transaction();
@@ -159,14 +158,12 @@ export default async function handler(req, res) {
       )
     );
 
-    // Step 3: Add Metaplex metadata account
-    console.log("📝 Step 3: Adding Metaplex metadata...");
+    // Step 3: Try to add Metaplex metadata account
+    console.log("📝 Step 3: Attempting to add Metaplex metadata...");
     
     try {
-      const { 
-        createCreateMetadataAccountV3Instruction,
-        PROGRAM_ID as METADATA_PROGRAM_ID 
-      } = await import("@metaplex-foundation/mpl-token-metadata");
+      const metaplexModule = await import("@metaplex-foundation/mpl-token-metadata");
+      const { createCreateMetadataAccountV3Instruction, PROGRAM_ID: METADATA_PROGRAM_ID } = metaplexModule;
 
       const [metadataAddress] = PublicKey.findProgramAddressSync(
         [
@@ -210,9 +207,10 @@ export default async function handler(req, res) {
         )
       );
 
-      console.log("✅ Metaplex metadata instruction added");
+      console.log("✅ Metaplex metadata instruction added successfully");
     } catch (metaplexError) {
-      console.log("⚠️ Metaplex metadata failed, continuing with basic token");
+      console.log("⚠️ Metaplex metadata failed:", metaplexError.message);
+      console.log("⚠️ Continuing with basic SPL token");
     }
 
     // Step 4: Create associated token account and mint to recipient
@@ -242,7 +240,7 @@ export default async function handler(req, res) {
     );
 
     // Sign and send transaction
-    console.log("📡 Step 4: Sending complete NFT transaction to Solana...");
+    console.log("📡 Step 4: Sending NFT transaction to Solana...");
     const signature = await connection.sendTransaction(
       transaction, 
       [creatorKeypair, mintKeypair],
@@ -261,7 +259,7 @@ export default async function handler(req, res) {
     console.log("💳 TOTAL NFT MINTING COST:", totalCostSOL, "SOL");
     console.log("💵 TOTAL NFT MINTING COST:", `~$${totalCostUSD.toFixed(4)} USD`);
 
-    console.log("🎉 === FULL NFT WITH IMAGES MINTED SUCCESSFULLY! ===");
+    console.log("🎉 === NFT WITH METADATA MINTED SUCCESSFULLY! ===");
     console.log("🔗 Mint address:", mintKeypair.publicKey.toString());
     console.log("📝 Transaction signature:", signature);
     console.log("🌐 Metadata URI:", metadataUri);
@@ -275,8 +273,8 @@ export default async function handler(req, res) {
       metadataUri: metadataUri,
       explorerUrl: explorerUrl,
       network: "mainnet-beta",
-      method: "full_nft_with_metadata",
-      message: "REAL NFT with images and metadata minted successfully on Solana mainnet!",
+      method: "nft_with_metadata_attempt",
+      message: "NFT with metadata minted successfully on Solana mainnet!",
       costs: {
         totalSOL: totalCostSOL,
         totalUSD: totalCostUSD,
@@ -286,7 +284,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error("❌ Full NFT mint error:", error);
+    console.error("❌ NFT mint error:", error);
     return res.status(500).json({
       success: false,
       error: error.message,
