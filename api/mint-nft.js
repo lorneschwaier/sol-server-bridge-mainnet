@@ -5,15 +5,16 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  
+
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
     const { walletAddress, metadata } = req.body;
 
-    console.log("🔥 === REAL NFT WITH METADATA - NO COMPROMISES ===");
+    console.log("🔥 === Minting NFT with Metadata ===");
 
+    // Validate input
     if (!walletAddress || !metadata || !metadata.image || !metadata.name) {
       return res.status(400).json({
         success: false,
@@ -45,6 +46,7 @@ export default async function handler(req, res) {
     const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
     console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString());
 
+    // Check wallet balance
     const balanceBefore = await connection.getBalance(creatorKeypair.publicKey);
     if (balanceBefore < 0.001 * 1e9) {
       return res.status(500).json({
@@ -53,9 +55,9 @@ export default async function handler(req, res) {
       });
     }
 
-    // Step 1: Upload metadata to IPFS - MUST WORK
+    // Step 1: Upload metadata to IPFS
     console.log("📤 Step 1: Uploading metadata to IPFS...");
-    
+
     let metadataUri;
     try {
       const nftMetadata = {
@@ -102,6 +104,7 @@ export default async function handler(req, res) {
 
     // Step 2: Create mint
     console.log("⚡ Step 2: Creating mint...");
+
     const mint = await createMint(
       connection,
       creatorKeypair,
@@ -112,20 +115,15 @@ export default async function handler(req, res) {
 
     console.log("🔑 Mint created:", mint.toString());
 
-    // Step 3: Create metadata using the CORRECT function from debug output
-    console.log("📝 Step 3: Creating metadata account with CORRECT function...");
-    
+    // Step 3: Create metadata account using the Metaplex function
+    console.log("📝 Step 3: Creating metadata account...");
+
     try {
       const metaplexLib = await import("@metaplex-foundation/mpl-token-metadata");
-      
-      // Use the instruction data serializer function we saw in the debug output
-      const metadataAccountDataSerializer = metaplexLib.getCreateMetadataAccountV3InstructionDataSerializer();
-      const METADATA_PROGRAM_ID = new PublicKey(metaplexLib.MPL_TOKEN_METADATA_PROGRAM_ID);
-      
-      console.log("✅ Using instruction data serializer approach");
-      console.log("🔍 METADATA_PROGRAM_ID:", METADATA_PROGRAM_ID.toString());
 
-      // Find metadata account PDA
+      const METADATA_PROGRAM_ID = new PublicKey(metaplexLib.MPL_TOKEN_METADATA_PROGRAM_ID);
+      console.log("✅ Using instruction data serializer approach");
+
       const [metadataAccount] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("metadata"),
@@ -137,48 +135,25 @@ export default async function handler(req, res) {
 
       console.log("📍 Metadata account PDA:", metadataAccount.toString());
 
-      // Create the instruction data
-      const instructionData = metadataAccountDataSerializer.serialize({
-        data: {
-          name: metadata.name,
-          symbol: "WP",
-          uri: metadataUri,
-          sellerFeeBasisPoints: 0,
-          creators: [
-            {
-              address: creatorKeypair.publicKey,
-              verified: true,
-              share: 100,
-            },
-          ],
-          collection: null,
-          uses: null,
-        },
-        isMutable: true,
-        collectionDetails: null,
-      });
+      const metadataTransaction = new Transaction().add(
+        metaplexLib.createCreateMetadataAccountV3Instruction(
+          metadataAccount,
+          mint,
+          creatorKeypair.publicKey,
+          creatorKeypair.publicKey,
+          creatorKeypair.publicKey,
+          metadataUri,
+          "WP",
+          0,
+          [creatorKeypair.publicKey],
+          null,
+          null
+        )
+      );
 
-      // Create the instruction manually
-      const createMetadataInstruction = {
-        keys: [
-          { pubkey: metadataAccount, isSigner: false, isWritable: true },
-          { pubkey: mint, isSigner: false, isWritable: false },
-          { pubkey: creatorKeypair.publicKey, isSigner: true, isWritable: false },
-          { pubkey: creatorKeypair.publicKey, isSigner: true, isWritable: true },
-          { pubkey: creatorKeypair.publicKey, isSigner: false, isWritable: false },
-          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-          { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
-        ],
-        programId: METADATA_PROGRAM_ID,
-        data: instructionData,
-      };
-
-      // Send metadata transaction
-      const metadataTransaction = new Transaction().add(createMetadataInstruction);
-      
       const metadataSignature = await connection.sendTransaction(metadataTransaction, [creatorKeypair]);
       await connection.confirmTransaction(metadataSignature);
-      
+
       console.log("✅ Metadata account created! Signature:", metadataSignature);
 
     } catch (metaplexError) {
@@ -191,6 +166,7 @@ export default async function handler(req, res) {
 
     // Step 4: Mint token to recipient
     console.log("🚀 Step 4: Minting token to recipient...");
+
     const recipientPubkey = new PublicKey(walletAddress);
     const tokenAccount = await getOrCreateAssociatedTokenAccount(
       connection,
@@ -211,7 +187,7 @@ export default async function handler(req, res) {
     const balanceAfter = await connection.getBalance(creatorKeypair.publicKey);
     const totalCostSOL = (balanceBefore - balanceAfter) / 1e9;
 
-    console.log("🔥 === REAL NFT WITH FULL METADATA CREATED ===");
+    console.log("🔥 === NFT Minted Successfully ===");
     console.log("🔗 Mint address:", mint.toString());
     console.log("📝 Mint signature:", mintSignature);
     console.log("🌐 Metadata URI:", metadataUri);
@@ -223,7 +199,7 @@ export default async function handler(req, res) {
       transactionSignature: mintSignature,
       metadataUri: metadataUri,
       explorerUrl: `https://explorer.solana.com/address/${mint.toString()}`,
-      message: "REAL NFT with full metadata created successfully!",
+      message: "NFT successfully minted with full metadata!",
       costs: {
         totalSOL: totalCostSOL,
         totalUSD: totalCostSOL * 165
