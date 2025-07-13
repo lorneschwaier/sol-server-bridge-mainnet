@@ -1,6 +1,7 @@
 {
   "functions": {
-    "api/*.js": {
+    "api/mint-nft.js": {
+      "runtime": "nodejs18.x",
       "maxDuration": 60
     }
   }
