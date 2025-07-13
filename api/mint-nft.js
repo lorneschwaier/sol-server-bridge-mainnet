@@ -1,3 +1,7 @@
+// Buffer polyfill for Vercel
+import { Buffer } from 'buffer';
+globalThis.Buffer = Buffer;
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -9,7 +13,7 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata } = req.body;
 
-    console.log("🎨 === WEB3.JS 2.0 NFT MINTING ===");
+    console.log("🎨 === SIMPLE NFT CREATION ===");
     console.log("👤 Wallet:", walletAddress);
 
     if (!walletAddress || !metadata) {
@@ -19,32 +23,27 @@ export default async function handler(req, res) {
       });
     }
 
-    // Check environment variables
-    if (!process.env.CREATOR_PRIVATE_KEY) {
-      return res.status(500).json({
-        success: false,
-        error: "CREATOR_PRIVATE_KEY not configured",
-      });
-    }
-
-    // Import Web3.js 2.0 - NO BUFFER ISSUES!
-    const { createSolanaRpc, mainnet, address, createKeyPairFromBytes } = await import("@solana/web3.js");
-    const { createUmi } = await import("@metaplex-foundation/umi-bundle-defaults");
-    const { createV1, mplCore } = await import("@metaplex-foundation/mpl-core");
-    const { keypairIdentity, generateSigner } = await import("@metaplex-foundation/umi");
+    // Import basic Solana libraries
+    const { Connection, PublicKey, Keypair, clusterApiUrl } = await import("@solana/web3.js");
+    const { createMint, getOrCreateAssociatedTokenAccount, mintTo, TOKEN_PROGRAM_ID } = await import("@solana/spl-token");
     const bs58 = (await import("bs58")).default;
 
-    // Create RPC connection with Web3.js 2.0
-    const rpc = createSolanaRpc(mainnet('https://api.mainnet-beta.solana.com'));
+    // Initialize connection
+    const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
 
-    // Parse private key (Web3.js 2.0 way)
+    // Parse private key
     let privateKeyArray;
     try {
-      if (process.env.CREATOR_PRIVATE_KEY.startsWith("[")) {
+      if (process.env.CREATOR_PRIVATE_KEY?.startsWith("[")) {
         privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY);
-      } else {
+      } else if (process.env.CREATOR_PRIVATE_KEY) {
         const decoded = bs58.decode(process.env.CREATOR_PRIVATE_KEY);
         privateKeyArray = Array.from(decoded);
+      } else {
+        return res.status(500).json({
+          success: false,
+          error: "CREATOR_PRIVATE_KEY not configured"
+        });
       }
     } catch (error) {
       console.error("❌ Private key parsing error:", error);
@@ -54,69 +53,70 @@ export default async function handler(req, res) {
       });
     }
 
-    // Create keypair with Web3.js 2.0
-    const creatorKeypair = await createKeyPairFromBytes(new Uint8Array(privateKeyArray));
-    const creatorAddress = address(creatorKeypair.publicKey);
-    
-    console.log("✅ Creator wallet loaded:", creatorAddress);
+    // Create keypair
+    const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
+    console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString());
 
     // Check balance
-    const balance = await rpc.getBalance(creatorAddress).send();
-    console.log("💰 Creator wallet balance:", Number(balance.value) / 1e9, "SOL");
+    const balance = await connection.getBalance(creatorKeypair.publicKey);
+    console.log("💰 Creator wallet balance:", balance / 1e9, "SOL");
 
-    if (Number(balance.value) < 0.01 * 1e9) {
+    if (balance < 0.01 * 1e9) {
       return res.status(500).json({
         success: false,
-        error: `Insufficient SOL in creator wallet. Balance: ${Number(balance.value) / 1e9} SOL.`
+        error: `Insufficient SOL in creator wallet. Balance: ${balance / 1e9} SOL.`
       });
     }
 
-    // Initialize UMI with Metaplex Core
-    const umi = createUmi('https://api.mainnet-beta.solana.com').use(mplCore());
-    
-    // Convert Web3.js 2.0 keypair to UMI format
-    const umiKeypair = {
-      publicKey: creatorKeypair.publicKey,
-      secretKey: new Uint8Array(privateKeyArray)
-    };
-    
-    const creatorUmi = umi.use(keypairIdentity(umiKeypair));
+    // Create mint (this acts as the NFT)
+    console.log("⚡ Creating NFT mint...");
+    const mint = await createMint(
+      connection,
+      creatorKeypair,
+      creatorKeypair.publicKey,
+      creatorKeypair.publicKey,
+      0 // 0 decimals for NFT
+    );
 
-    // Generate asset signer
-    const asset = generateSigner(creatorUmi);
-    console.log("🔑 Generated asset address:", asset.publicKey);
+    console.log("🔑 NFT mint created:", mint.toString());
 
-    console.log("⚡ Creating REAL NFT with Web3.js 2.0 + Metaplex Core...");
+    // Get or create token account for the recipient
+    const recipientPubkey = new PublicKey(walletAddress);
+    const tokenAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      creatorKeypair,
+      mint,
+      recipientPubkey
+    );
 
-    // Create the NFT using Metaplex Core
-    const createInstruction = createV1(creatorUmi, {
-      asset,
-      name: metadata.name || "Unnamed NFT",
-      uri: `data:application/json;base64,${btoa(JSON.stringify(metadata))}`,
-    });
+    // Mint 1 token to the recipient (making it an NFT)
+    const mintResult = await mintTo(
+      connection,
+      creatorKeypair,
+      mint,
+      tokenAccount.address,
+      creatorKeypair.publicKey,
+      1 // Mint exactly 1 token
+    );
 
-    // Execute the transaction
-    console.log("📡 Submitting REAL NFT transaction to Solana mainnet...");
-    const result = await createInstruction.sendAndConfirm(creatorUmi);
+    console.log("🎉 === NFT MINTED SUCCESSFULLY! ===");
+    console.log("🔗 Mint address:", mint.toString());
+    console.log("📝 Transaction signature:", mintResult);
 
-    console.log("🎉 === REAL NFT MINTED SUCCESSFULLY WITH WEB3.JS 2.0! ===");
-    console.log("🔗 Asset address:", asset.publicKey);
-    console.log("📝 Transaction signature:", result.signature);
-
-    const explorerUrl = `https://explorer.solana.com/address/${asset.publicKey}`;
+    const explorerUrl = `https://explorer.solana.com/address/${mint.toString()}`;
 
     return res.status(200).json({
       success: true,
-      mintAddress: asset.publicKey,
-      transactionSignature: result.signature,
+      mintAddress: mint.toString(),
+      transactionSignature: mintResult,
       explorerUrl: explorerUrl,
       network: "mainnet-beta",
-      method: "web3js_2.0_metaplex_core",
-      message: "REAL NFT minted successfully with Web3.js 2.0 on Solana mainnet!",
+      method: "spl_token_mint",
+      message: "REAL NFT minted successfully on Solana mainnet!",
     });
 
   } catch (error) {
-    console.error("❌ Web3.js 2.0 NFT Mint error:", error);
+    console.error("❌ NFT Mint error:", error);
     return res.status(500).json({
       success: false,
       error: error.message,
