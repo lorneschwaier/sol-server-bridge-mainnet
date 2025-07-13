@@ -12,9 +12,6 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata } = req.body;
 
-    console.log("🔥 === Minting NFT with Metadata ===");
-
-    // Validate input
     if (!walletAddress || !metadata || !metadata.image || !metadata.name) {
       return res.status(400).json({
         success: false,
@@ -29,7 +26,6 @@ export default async function handler(req, res) {
 
     const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
 
-    // Parse private key
     let privateKeyArray;
     try {
       const privateKey = process.env.CREATOR_PRIVATE_KEY.trim();
@@ -46,7 +42,6 @@ export default async function handler(req, res) {
     const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
     console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString());
 
-    // Check wallet balance
     const balanceBefore = await connection.getBalance(creatorKeypair.publicKey);
     if (balanceBefore < 0.001 * 1e9) {
       return res.status(500).json({
@@ -57,7 +52,7 @@ export default async function handler(req, res) {
 
     // Step 1: Upload metadata to IPFS
     console.log("📤 Step 1: Uploading metadata to IPFS...");
-
+    
     let metadataUri;
     try {
       const nftMetadata = {
@@ -115,14 +110,14 @@ export default async function handler(req, res) {
 
     console.log("🔑 Mint created:", mint.toString());
 
-    // Step 3: Create metadata account using the Metaplex function
+    // Step 3: Create metadata account
     console.log("📝 Step 3: Creating metadata account...");
 
     try {
       const metaplexLib = await import("@metaplex-foundation/mpl-token-metadata");
 
       const METADATA_PROGRAM_ID = new PublicKey(metaplexLib.MPL_TOKEN_METADATA_PROGRAM_ID);
-      console.log("✅ Using instruction data serializer approach");
+      console.log("✅ Using createCreateMetadataAccountInstruction function");
 
       const [metadataAccount] = PublicKey.findProgramAddressSync(
         [
@@ -136,7 +131,7 @@ export default async function handler(req, res) {
       console.log("📍 Metadata account PDA:", metadataAccount.toString());
 
       const metadataTransaction = new Transaction().add(
-        metaplexLib.createCreateMetadataAccountV3Instruction(
+        metaplexLib.createCreateMetadataAccountInstruction(
           metadataAccount,
           mint,
           creatorKeypair.publicKey,
