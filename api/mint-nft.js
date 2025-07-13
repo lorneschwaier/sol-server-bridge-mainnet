@@ -44,7 +44,6 @@ export default async function handler(req, res) {
 
     // ✅ Create clean mint signer
 const mint = generateSigner(umi);
-await umi.rpc.airdrop(mint.publicKey, 1_000_000); // optional: fund if local/dev
 
 // Ensure mint account is new and clean
 
