@@ -42,8 +42,12 @@ export default async function handler(req, res) {
     const payer = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(secretKey));
     umi.use(keypairIdentity(payer));
 
-    // 🎨 Mint NFT
-    const mint = generateSigner(umi);
+    // ✅ Create clean mint signer
+const mint = generateSigner(umi);
+await umi.rpc.airdrop(mint.publicKey, 1_000_000); // optional: fund if local/dev
+
+// Ensure mint account is new and clean
+
     const {
       name = 'X1XO NFT',
       symbol = 'X1XO',
