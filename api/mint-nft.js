@@ -28,24 +28,21 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'Missing walletAddress or metadata' });
     }
 
-    // ✅ Get and validate RPC endpoint
+    // ✅ Use correct mainnet RPC
     const rpcEndpoint = process.env.RPC_URL || 'https://api.mainnet-beta.solana.com';
-    console.log('🔗 Using Solana RPC endpoint:', rpcEndpoint);
     const umi = createUmi(rpcEndpoint);
 
     // ✅ Register required programs
     umi.programs.add(createSplTokenProgram());
     umi.programs.add(createSplAssociatedTokenProgram());
 
-    // 🔐 Load private key from env
+    // 🔐 Load private key
     const secretKey = JSON.parse(process.env.CREATOR_PRIVATE_KEY);
     const payer = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(secretKey));
     umi.use(keypairIdentity(payer));
 
-    // ✅ Create clean mint signer
-const mint = generateSigner(umi);
-
-// Ensure mint account is new and clean
+    // ✅ Fresh mint signer
+    const mint = generateSigner(umi);
 
     const {
       name = 'X1XO NFT',
@@ -57,6 +54,7 @@ const mint = generateSigner(umi);
       return res.status(400).json({ success: false, error: 'Missing name or uri in metadata' });
     }
 
+    // ✅ Create and mint NFT
     const nft = await createNft(umi, {
       mint,
       name,
@@ -72,7 +70,7 @@ const mint = generateSigner(umi);
           share: 100,
         }
       ],
-      tokenOwner: fromWeb3JsPublicKey(new PublicKey(walletAddress))
+      tokenOwner: fromWeb3JsPublicKey(new PublicKey(walletAddress)),
     }).sendAndConfirm(umi);
 
     return res.status(200).json({
@@ -84,6 +82,10 @@ const mint = generateSigner(umi);
 
   } catch (error) {
     console.error('❌ Minting failed:', error);
+    if (error.getLogs) {
+      const logs = await error.getLogs();
+      console.error('🪵 Transaction Logs:', logs);
+    }
     return res.status(500).json({ success: false, error: error.message || 'Minting failed' });
   }
 }
