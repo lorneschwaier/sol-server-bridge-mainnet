@@ -1,13 +1,10 @@
-// Add this at the very top of your mint-nft.js file
+// api/mint-nft.js
 import { Buffer } from 'buffer';
 if (typeof globalThis !== 'undefined' && !globalThis.Buffer) {
     globalThis.Buffer = Buffer;
 }
-if (typeof global !== 'undefined' && !global.Buffer) {
-    global.Buffer = Buffer;
-}
 
-// api/mint-nft.js
+import { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } from "@solana/web3.js";
 
 import { Buffer } from 'buffer';
 import { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } from "@solana/web3.js";
@@ -115,11 +112,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ success: false, error: error.message });
   }
 }
-// Add this at the very top of your mint-nft.js file
-import { Buffer } from 'buffer';
-if (typeof globalThis !== 'undefined' && !globalThis.Buffer) {
-    globalThis.Buffer = Buffer;
-}
-if (typeof global !== 'undefined' && !global.Buffer) {
-    global.Buffer = Buffer;
-}
+
