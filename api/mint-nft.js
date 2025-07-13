@@ -9,8 +9,9 @@ const { create, mplTokenMetadata } = pkg;
 // Initialize Solana connection
 const connection = new Connection(process.env.SOLANA_RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com', 'confirmed');
 
-export async function handler(req, res) {
+export default async function handler(req, res) {
   try {
+    // Validate request body
     const { wallet, productId } = req.body;
 
     if (!wallet || !productId) {
@@ -21,6 +22,7 @@ export async function handler(req, res) {
     const umi = createUmi(process.env.SOLANA_RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com')
       .use(mplTokenMetadata());
 
+    // Create keypair from the private key (assuming the private key is in the environment)
     const payer = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(JSON.parse(process.env.CREATOR_PRIVATE_KEY)));
     umi.use(keypairIdentity(payer));
 
@@ -30,7 +32,7 @@ export async function handler(req, res) {
     const nftSymbol = 'X1XO';
 
     // Create the NFT using Metaplex
-    await create(umi, {
+    const createTransaction = await create(umi, {
       mint: mintAddress,
       authority: umi.identity,
       name: nftName,
@@ -44,7 +46,7 @@ export async function handler(req, res) {
       SystemProgram.transfer({
         fromPubkey: payer.publicKey, // Payer wallet
         toPubkey: mintAddress, // Replace with your mint address
-        lamports: 0.0062 * LAMPORTS_PER_SOL, // Transfer amount in lamports
+        lamports: 0.0062 * LAMPORTS_PER_SOL, // Transfer amount in lamports (0.0062 SOL)
       })
     );
 
@@ -59,6 +61,7 @@ export async function handler(req, res) {
       message: 'NFT minted and SOL transfer completed successfully!',
     });
   } catch (error) {
+    // Handle errors properly
     console.error('Error during minting process:', error);
     return res.status(500).json({
       success: false,
