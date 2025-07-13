@@ -1,71 +1,194 @@
-import pkg from '@metaplex-foundation/mpl-token-metadata';
-import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { keypairIdentity, publicKey } from '@metaplex-foundation/umi';
-import { Connection, Transaction, SystemProgram, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
-
-// Destructure the required functions from the module
-const { create, mplTokenMetadata } = pkg;
-
-// Initialize Solana connection
-const connection = new Connection(process.env.SOLANA_RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com', 'confirmed');
-
+// Vercel Serverless Function for NFT Minting
 export default async function handler(req, res) {
-  try {
-    // Validate request body
-    const { wallet, productId } = req.body;
+  // CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, error: "Method not allowed" });
+  }
 
-    if (!wallet || !productId) {
-      return res.status(400).json({ success: false, error: 'Missing wallet or product ID' });
+  try {
+    const { walletAddress, metadata } = req.body;
+
+    console.log("🎨 === NFT MINTING REQUEST ===");
+    console.log("👤 Wallet:", walletAddress);
+    console.log("📋 Metadata:", JSON.stringify(metadata, null, 2));
+
+    if (!walletAddress || !metadata) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields: walletAddress and metadata",
+      });
     }
 
-    // Initialize UMI with wallet and keypair
-    const umi = createUmi(process.env.SOLANA_RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com')
-      .use(mplTokenMetadata());
+    // Check environment variables
+    if (!process.env.CREATOR_PRIVATE_KEY) {
+      return res.status(500).json({
+        success: false,
+        error: "CREATOR_PRIVATE_KEY not configured",
+      });
+    }
 
-    // Create keypair from the private key (assuming the private key is in the environment)
-    const payer = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(JSON.parse(process.env.CREATOR_PRIVATE_KEY)));
-    umi.use(keypairIdentity(payer));
+    if (!process.env.PINATA_API_KEY || !process.env.PINATA_SECRET_KEY) {
+      return res.status(500).json({
+        success: false,
+        error: "Pinata API credentials not configured",
+      });
+    }
 
-    const mintAddress = publicKey('your_mint_address_here'); // Replace with your mint address
-    const metadataURI = 'https://example.com/metadata.json'; // Replace with your metadata URI
-    const nftName = 'My NFT';
-    const nftSymbol = 'X1XO';
+    // Dynamic imports
+    const { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } = await import("@solana/web3.js");
+    const { createUmi } = await import("@metaplex-foundation/umi-bundle-defaults");
+    const { createV1, mplCore } = await import("@metaplex-foundation/mpl-core");
+    const { keypairIdentity, generateSigner, publicKey, some, none } = await import("@metaplex-foundation/umi");
+    const { fromWeb3JsKeypair } = await import("@metaplex-foundation/umi-web3js-adapters");
 
-    // Create the NFT using Metaplex
-    const createTransaction = await create(umi, {
-      mint: mintAddress,
-      authority: umi.identity,
-      name: nftName,
-      symbol: nftSymbol,
-      uri: metadataURI,
-      sellerFeeBasisPoints: 500, // 5% seller fee
-    }).sendAndConfirm(umi);
+    // Import axios differently for Vercel
+    const axios = (await import("axios")).default;
+    const bs58 = (await import("bs58")).default;
 
-    // Transfer SOL to fund the mint account creation
-    const transferTransaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: payer.publicKey, // Payer wallet
-        toPubkey: mintAddress, // Replace with your mint address
-        lamports: 0.0062 * LAMPORTS_PER_SOL, // Transfer amount in lamports (0.0062 SOL)
-      })
+    // Environment variables
+    const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta";
+    const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 
+      (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK));
+
+    // Validate wallet address
+    try {
+      new PublicKey(walletAddress);
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid wallet address format",
+      });
+    }
+
+    // Step 1: Upload metadata to Pinata
+    console.log("📤 Step 1: Uploading metadata...");
+
+    const pinataResponse = await axios.post(
+      "https://api.pinata.cloud/pinning/pinJSONToIPFS",
+      {
+        pinataContent: metadata,
+        pinataMetadata: {
+          name: `nft-metadata-${Date.now()}.json`,
+        },
+      },
+      {
+        headers: {
+          pinata_api_key: process.env.PINATA_API_KEY,
+          pinata_secret_api_key: process.env.PINATA_SECRET_KEY,
+        },
+        timeout: 30000,
+      }
     );
 
-    // Send the transfer transaction
-    const signature = await connection.sendTransaction(transferTransaction, [payer]);
-    await connection.confirmTransaction(signature);
+    const metadataUrl = `https://gateway.pinata.cloud/ipfs/${pinataResponse.data.IpfsHash}`;
+    console.log("✅ Metadata uploaded to Pinata:", metadataUrl);
 
-    // Respond with success
+    // Step 2: Initialize Solana connection and mint NFT
+    console.log("⚡ Step 2: Minting NFT...");
+
+    const connection = new Connection(SOLANA_RPC_URL, "confirmed");
+
+    // Parse private key
+    let privateKeyArray;
+    try {
+      if (process.env.CREATOR_PRIVATE_KEY.startsWith("[")) {
+        privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY);
+      } else {
+        const decoded = bs58.decode(process.env.CREATOR_PRIVATE_KEY);
+        privateKeyArray = Array.from(decoded);
+      }
+    } catch (error) {
+      console.error("❌ Private key parsing error:", error);
+      return res.status(500).json({
+        success: false,
+        error: "Invalid CREATOR_PRIVATE_KEY format"
+      });
+    }
+
+    // Create Web3.js keypair
+    const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
+    console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString());
+
+    // Check creator wallet balance
+    const balance = await connection.getBalance(creatorKeypair.publicKey);
+    console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL");
+
+    if (balance < 0.01 * LAMPORTS_PER_SOL) {
+      return res.status(500).json({
+        success: false,
+        error: `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet.`
+      });
+    }
+
+    // Initialize UMI with Metaplex Core
+    const umi = createUmi(SOLANA_RPC_URL).use(mplCore());
+    const umiKeypair = fromWeb3JsKeypair(creatorKeypair);
+    const creatorUmi = umi.use(keypairIdentity(umiKeypair));
+
+    // Generate asset signer
+    const asset = generateSigner(creatorUmi);
+    console.log("🔑 Generated asset address:", asset.publicKey);
+
+    // Prepare collection (if provided)
+    let collectionConfig = none();
+    if (metadata.collection && metadata.collection.trim()) {
+      try {
+        const collectionPubkey = publicKey(metadata.collection.trim());
+        collectionConfig = some({ key: collectionPubkey, verified: false });
+        console.log("📁 Collection configured:", metadata.collection);
+      } catch (error) {
+        console.log("⚠️ Invalid collection address, proceeding without collection");
+      }
+    }
+
+    console.log("⚡ Creating NFT with Metaplex Core...");
+
+    // Create the NFT using Metaplex Core
+    const createInstruction = createV1(creatorUmi, {
+      asset,
+      name: metadata.name || "Unnamed NFT",
+      uri: metadataUrl,
+      collection: collectionConfig,
+    });
+
+    // Execute the transaction
+    console.log("📡 Submitting transaction to Solana...");
+    const result = await createInstruction.sendAndConfirm(creatorUmi, {
+      confirm: { commitment: "confirmed" },
+      send: { skipPreflight: false },
+    });
+
+    console.log("🎉 === NFT MINTED SUCCESSFULLY! ===");
+    console.log("🔗 Asset address:", asset.publicKey);
+    console.log("📝 Transaction signature:", result.signature);
+
+    const explorerUrl = `https://explorer.solana.com/address/${asset.publicKey}${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`;
+
     return res.status(200).json({
       success: true,
-      signature: signature,
-      message: 'NFT minted and SOL transfer completed successfully!',
+      mintAddress: asset.publicKey,
+      transactionSignature: result.signature,
+      metadataUrl: metadataUrl,
+      explorerUrl: explorerUrl,
+      network: SOLANA_NETWORK,
+      method: "metaplex_core",
+      message: "NFT minted successfully on Solana with Metaplex Core!",
     });
+
   } catch (error) {
-    // Handle errors properly
-    console.error('Error during minting process:', error);
+    console.error("❌ Mint NFT error:", error);
     return res.status(500).json({
       success: false,
-      error: error.message || 'An error occurred during minting.',
+      error: error.message,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
 }
