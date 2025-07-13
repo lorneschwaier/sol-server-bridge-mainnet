@@ -76,21 +76,14 @@ export default async function handler(req, res) {
       
       console.log("📋 Available functions:", Object.keys(metaplexLib).slice(0, 10));
       
-      // Try multiple possible function names
-      createCreateMetadataAccountV3Instruction = 
-        metaplexLib.createCreateMetadataAccountV3Instruction ||
-        metaplexLib.createCreateMetadataAccountInstruction ||
-        metaplexLib.CreateMetadataAccountV3 ||
-        metaplexLib.CreateMetadataAccount;
+      // Use the CORRECT function names from the debug output
+      createCreateMetadataAccountV3Instruction = metaplexLib.createMetadataAccountV3;
         
-      // Try multiple possible PROGRAM_ID names
-      METADATA_PROGRAM_ID = 
-        metaplexLib.PROGRAM_ID ||
-        metaplexLib.MPL_TOKEN_METADATA_PROGRAM_ID ||
-        metaplexLib.TOKEN_METADATA_PROGRAM_ID;
+      // Use the CORRECT PROGRAM_ID name
+      METADATA_PROGRAM_ID = metaplexLib.MPL_TOKEN_METADATA_PROGRAM_ID;
       
-      console.log("🔍 createCreateMetadataAccountV3Instruction:", typeof createCreateMetadataAccountV3Instruction);
-      console.log("🔍 METADATA_PROGRAM_ID:", METADATA_PROGRAM_ID ? METADATA_PROGRAM_ID.toString() : "undefined");
+      console.log("🔍 createMetadataAccountV3:", typeof createCreateMetadataAccountV3Instruction);
+      console.log("🔍 MPL_TOKEN_METADATA_PROGRAM_ID:", METADATA_PROGRAM_ID ? METADATA_PROGRAM_ID.toString() : "undefined");
       
       if (typeof createCreateMetadataAccountV3Instruction !== 'function') {
         console.log("❌ Function not found, available functions:", Object.keys(metaplexLib).filter(key => key.toLowerCase().includes('metadata')));
@@ -195,7 +188,7 @@ export default async function handler(req, res) {
 
       console.log("📍 Metadata account PDA:", metadataAccount.toString());
 
-      // Create metadata account instruction
+      // Create metadata account instruction using the correct function
       const createMetadataInstruction = createCreateMetadataAccountV3Instruction(
         {
           metadata: metadataAccount,
@@ -205,25 +198,23 @@ export default async function handler(req, res) {
           updateAuthority: creatorKeypair.publicKey,
         },
         {
-          createMetadataAccountArgsV3: {
-            data: {
-              name: metadata.name,
-              symbol: "WP",
-              uri: metadataUri,
-              sellerFeeBasisPoints: 0,
-              creators: [
-                {
-                  address: creatorKeypair.publicKey,
-                  verified: true,
-                  share: 100,
-                },
-              ],
-              collection: null,
-              uses: null,
-            },
-            isMutable: true,
-            collectionDetails: null,
+          data: {
+            name: metadata.name,
+            symbol: "WP",
+            uri: metadataUri,
+            sellerFeeBasisPoints: 0,
+            creators: [
+              {
+                address: creatorKeypair.publicKey,
+                verified: true,
+                share: 100,
+              },
+            ],
+            collection: null,
+            uses: null,
           },
+          isMutable: true,
+          collectionDetails: null,
         }
       );
 
