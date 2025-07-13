@@ -191,7 +191,7 @@ export default async function handler(req, res) {
 
       console.log("📍 Metadata account PDA:", metadataAccount.toString());
 
-      // Create metadata account instruction using the correct function
+      // Create metadata account instruction using the correct function format
       const createMetadataInstruction = createCreateMetadataAccountV3Instruction(
         {
           metadata: metadataAccount,
@@ -199,25 +199,29 @@ export default async function handler(req, res) {
           mintAuthority: creatorKeypair.publicKey,
           payer: creatorKeypair.publicKey,
           updateAuthority: creatorKeypair.publicKey,
+          systemProgram: (await import("@solana/web3.js")).SystemProgram.programId,
+          rent: (await import("@solana/web3.js")).SYSVAR_RENT_PUBKEY,
         },
         {
-          data: {
-            name: metadata.name,
-            symbol: "WP",
-            uri: metadataUri,
-            sellerFeeBasisPoints: 0,
-            creators: [
-              {
-                address: creatorKeypair.publicKey,
-                verified: true,
-                share: 100,
-              },
-            ],
-            collection: null,
-            uses: null,
+          createMetadataAccountArgsV3: {
+            data: {
+              name: metadata.name,
+              symbol: "WP",
+              uri: metadataUri,
+              sellerFeeBasisPoints: 0,
+              creators: [
+                {
+                  address: creatorKeypair.publicKey,
+                  verified: true,
+                  share: 100,
+                },
+              ],
+              collection: null,
+              uses: null,
+            },
+            isMutable: true,
+            collectionDetails: null,
           },
-          isMutable: true,
-          collectionDetails: null,
         }
       );
 
