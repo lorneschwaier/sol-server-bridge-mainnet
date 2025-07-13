@@ -1,3 +1,9 @@
+// Buffer polyfill for Vercel Edge Runtime
+import { Buffer } from 'buffer';
+if (typeof globalThis.Buffer === 'undefined') {
+  globalThis.Buffer = Buffer;
+}
+
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
@@ -43,14 +49,14 @@ export default async function handler(req, res) {
       })
     }
 
-    // Dynamic imports
+    // Dynamic imports with proper ES modules
     const { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } = await import("@solana/web3.js")
     const { createUmi } = await import("@metaplex-foundation/umi-bundle-defaults")
     const { createV1, mplCore } = await import("@metaplex-foundation/mpl-core")
     const { keypairIdentity, generateSigner, publicKey, some, none } = await import("@metaplex-foundation/umi")
     const { fromWeb3JsKeypair } = await import("@metaplex-foundation/umi-web3js-adapters")
-    const axios = await import("axios")
-    const bs58 = await import("bs58")
+    const axios = (await import("axios")).default
+    const bs58 = (await import("bs58")).default
 
     // Environment variables
     const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
@@ -71,7 +77,7 @@ export default async function handler(req, res) {
     // Step 1: Upload metadata to Pinata
     console.log("📤 Step 1: Uploading metadata...")
 
-    const pinataResponse = await axios.default.post(
+    const pinataResponse = await axios.post(
       "https://api.pinata.cloud/pinning/pinJSONToIPFS",
       {
         pinataContent: metadata,
@@ -96,15 +102,25 @@ export default async function handler(req, res) {
 
     const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
-    // Parse private key
+    // Parse private key with better Buffer handling
     let privateKeyArray
-    if (process.env.CREATOR_PRIVATE_KEY.startsWith("[")) {
-      privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY)
-    } else {
-      privateKeyArray = Array.from(bs58.default.decode(process.env.CREATOR_PRIVATE_KEY))
+    try {
+      if (process.env.CREATOR_PRIVATE_KEY.startsWith("[")) {
+        privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY)
+      } else {
+        // Use bs58 decode with proper Buffer
+        const decoded = bs58.decode(process.env.CREATOR_PRIVATE_KEY)
+        privateKeyArray = Array.from(decoded)
+      }
+    } catch (error) {
+      console.error("❌ Private key parsing error:", error)
+      return res.status(500).json({
+        success: false,
+        error: "Invalid CREATOR_PRIVATE_KEY format"
+      })
     }
 
-    // Create Web3.js keypair
+    // Create Web3.js keypair with proper Uint8Array
     const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
     console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
 
@@ -113,9 +129,10 @@ export default async function handler(req, res) {
     console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
 
     if (balance < 0.01 * LAMPORTS_PER_SOL) {
-      throw new Error(
-        `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet.`,
-      )
+      return res.status(500).json({
+        success: false,
+        error: `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet.`
+      })
     }
 
     // Initialize UMI with Metaplex Core
