@@ -1,7 +1,0 @@
-{
-  "functions": {
-    "api/mint-nft.js": {
-      "runtime": "nodejs18.x"
-    }
-  }
-}
