@@ -3,6 +3,7 @@ import { Buffer } from 'buffer';
 globalThis.Buffer = globalThis.Buffer || Buffer;
 
 // ✅ Imports
+import { PublicKey } from '@solana/web3.js';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { createNft } from '@metaplex-foundation/mpl-token-metadata';
 import {
@@ -65,7 +66,8 @@ export default async function handler(req, res) {
           share: 100
         }
       ],
-      tokenOwner: fromWeb3JsPublicKey(walletAddress)
+      tokenOwner: fromWeb3JsPublicKey(new PublicKey(walletAddress))
+
     }).sendAndConfirm(umi);
 
     return res.status(200).json({
