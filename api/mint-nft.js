@@ -8,7 +8,7 @@ import {
   generateSigner
 } from '@metaplex-foundation/umi';
 import { fromWeb3JsPublicKey } from '@metaplex-foundation/umi-web3js-adapters';
-import { createSplAssociatedTokenProgram } from '@metaplex-foundation/mpl-toolbox';
+import { createSplTokenProgram, createSplAssociatedTokenProgram } from '@metaplex-foundation/mpl-toolbox';
 import { PublicKey } from '@solana/web3.js';
 
 export default async function handler(req, res) {
@@ -33,7 +33,8 @@ export default async function handler(req, res) {
     console.log('🔗 Using Solana RPC endpoint:', rpcEndpoint);
     const umi = createUmi(rpcEndpoint);
 
-    // ✅ Register required mainnet programs (splAssociatedToken)
+    // ✅ Register required programs
+    umi.programs.add(createSplTokenProgram());
     umi.programs.add(createSplAssociatedTokenProgram());
 
     // 🔐 Load private key from env
