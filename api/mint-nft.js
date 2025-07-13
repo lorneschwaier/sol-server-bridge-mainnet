@@ -13,8 +13,8 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata } = req.body;
 
-    console.log("🎨 === FIXED NFT CREATION ===");
-    console.log("👤 Wallet:", walletAddress);
+    console.log("🎨 === CLEAN WALLET NFT CREATION ===");
+    console.log("👤 Recipient:", walletAddress);
 
     if (!walletAddress || !metadata) {
       return res.status(400).json({
@@ -24,48 +24,45 @@ export default async function handler(req, res) {
     }
 
     // Import Solana libraries
-    const { Connection, PublicKey, Keypair, SystemProgram, Transaction } = await import("@solana/web3.js");
-    const { 
-      createMint, 
-      getOrCreateAssociatedTokenAccount, 
-      mintTo, 
-      TOKEN_PROGRAM_ID,
-      createAssociatedTokenAccountInstruction,
-      getAssociatedTokenAddress
-    } = await import("@solana/spl-token");
+    const { Connection, PublicKey, Keypair } = await import("@solana/web3.js");
+    const { createMint, getOrCreateAssociatedTokenAccount, mintTo } = await import("@solana/spl-token");
     const bs58 = (await import("bs58")).default;
 
     // Initialize connection
     const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
 
-    // Parse private key
+    // Parse private key - HANDLE BOTH FORMATS
     let privateKeyArray;
     try {
-      if (process.env.CREATOR_PRIVATE_KEY?.startsWith("[")) {
-        privateKeyArray = JSON.parse(process.env.CREATOR_PRIVATE_KEY);
-      } else if (process.env.CREATOR_PRIVATE_KEY) {
-        const decoded = bs58.decode(process.env.CREATOR_PRIVATE_KEY);
-        privateKeyArray = Array.from(decoded);
-      } else {
+      if (!process.env.CREATOR_PRIVATE_KEY) {
         return res.status(500).json({
           success: false,
           error: "CREATOR_PRIVATE_KEY not configured"
         });
       }
+
+      const privateKey = process.env.CREATOR_PRIVATE_KEY.trim();
+      
+      if (privateKey.startsWith("[")) {
+        // Array format: [123,148,225,...]
+        privateKeyArray = JSON.parse(privateKey);
+      } else {
+        // Base58 format: 5YHrEfQ1563RyQE3TKzLoqYvqHiBGk8brEu5WkPAa6rsuobDLEtin9czkKgJbMpVhu2GV4J
+        const decoded = bs58.decode(privateKey);
+        privateKeyArray = Array.from(decoded);
+      }
     } catch (error) {
       console.error("❌ Private key parsing error:", error);
       return res.status(500).json({
         success: false,
-        error: "Invalid CREATOR_PRIVATE_KEY format"
+        error: "Invalid CREATOR_PRIVATE_KEY format. Use either [123,148,...] or base58 string"
       });
     }
 
-    // Create keypairs - USE FRESH KEYPAIR FOR MINT
+    // Create creator keypair from clean wallet
     const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
-    const mintKeypair = Keypair.generate(); // NEW MINT KEYPAIR
     
-    console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString());
-    console.log("🔑 New mint keypair generated:", mintKeypair.publicKey.toString());
+    console.log("✅ Clean creator wallet loaded:", creatorKeypair.publicKey.toString());
 
     // Check balance
     const balance = await connection.getBalance(creatorKeypair.publicKey);
@@ -74,96 +71,59 @@ export default async function handler(req, res) {
     if (balance < 0.01 * 1e9) {
       return res.status(500).json({
         success: false,
-        error: `Insufficient SOL in creator wallet. Balance: ${balance / 1e9} SOL.`
+        error: `Insufficient SOL in creator wallet. Balance: ${balance / 1e9} SOL. Please fund: ${creatorKeypair.publicKey.toString()}`
       });
     }
 
-    // Create the mint account manually to avoid conflicts
-    console.log("⚡ Creating NFT mint account...");
-    
-    const lamports = await connection.getMinimumBalanceForRentExemption(82); // Mint account size
-    
-    const transaction = new Transaction();
-    
-    // Create mint account
-    transaction.add(
-      SystemProgram.createAccount({
-        fromPubkey: creatorKeypair.publicKey,
-        newAccountPubkey: mintKeypair.publicKey,
-        lamports,
-        space: 82,
-        programId: TOKEN_PROGRAM_ID,
-      })
+    // Create mint - should work with clean wallet
+    console.log("⚡ Creating NFT mint with clean wallet...");
+    const mint = await createMint(
+      connection,
+      creatorKeypair,           // payer (clean wallet)
+      creatorKeypair.publicKey, // mint authority
+      creatorKeypair.publicKey, // freeze authority
+      0                         // 0 decimals for NFT
     );
 
-    // Initialize mint
-    const { createInitializeMintInstruction } = await import("@solana/spl-token");
-    transaction.add(
-      createInitializeMintInstruction(
-        mintKeypair.publicKey,
-        0, // 0 decimals for NFT
-        creatorKeypair.publicKey,
-        creatorKeypair.publicKey,
-        TOKEN_PROGRAM_ID
-      )
-    );
+    console.log("🔑 NFT mint created:", mint.toString());
 
-    // Get recipient's associated token address
+    // Get or create token account for the recipient
     const recipientPubkey = new PublicKey(walletAddress);
-    const associatedTokenAddress = await getAssociatedTokenAddress(
-      mintKeypair.publicKey,
-      recipientPubkey
+    const tokenAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      creatorKeypair,    // payer
+      mint,              // mint
+      recipientPubkey    // owner
     );
 
-    // Create associated token account for recipient
-    transaction.add(
-      createAssociatedTokenAccountInstruction(
-        creatorKeypair.publicKey, // payer
-        associatedTokenAddress,   // associated token account
-        recipientPubkey,          // owner
-        mintKeypair.publicKey     // mint
-      )
+    // Mint 1 token to the recipient
+    const mintResult = await mintTo(
+      connection,
+      creatorKeypair,           // payer
+      mint,                     // mint
+      tokenAccount.address,     // destination
+      creatorKeypair.publicKey, // authority
+      1                         // amount (1 for NFT)
     );
 
-    // Mint 1 token to recipient
-    const { createMintToInstruction } = await import("@solana/spl-token");
-    transaction.add(
-      createMintToInstruction(
-        mintKeypair.publicKey,    // mint
-        associatedTokenAddress,   // destination
-        creatorKeypair.publicKey, // authority
-        1                         // amount (1 for NFT)
-      )
-    );
+    console.log("🎉 === NFT MINTED SUCCESSFULLY WITH CLEAN WALLET! ===");
+    console.log("🔗 Mint address:", mint.toString());
+    console.log("📝 Transaction signature:", mintResult);
 
-    // Sign and send transaction
-    const signature = await connection.sendTransaction(
-      transaction, 
-      [creatorKeypair, mintKeypair], // Both keypairs needed
-      { skipPreflight: false }
-    );
-
-    // Wait for confirmation
-    await connection.confirmTransaction(signature);
-
-    console.log("🎉 === NFT MINTED SUCCESSFULLY! ===");
-    console.log("🔗 Mint address:", mintKeypair.publicKey.toString());
-    console.log("📝 Transaction signature:", signature);
-
-    const explorerUrl = `https://explorer.solana.com/address/${mintKeypair.publicKey.toString()}`;
+    const explorerUrl = `https://explorer.solana.com/address/${mint.toString()}`;
 
     return res.status(200).json({
       success: true,
-      mintAddress: mintKeypair.publicKey.toString(),
-      transactionSignature: signature,
+      mintAddress: mint.toString(),
+      transactionSignature: mintResult,
       explorerUrl: explorerUrl,
       network: "mainnet-beta",
-      method: "manual_spl_token_creation",
-      message: "REAL NFT minted successfully on Solana mainnet!",
+      method: "clean_wallet_spl_token",
+      message: "REAL NFT minted successfully with clean wallet on Solana mainnet!",
     });
 
   } catch (error) {
-    console.error("❌ NFT Mint error:", error);
+    console.error("❌ Clean wallet NFT mint error:", error);
     return res.status(500).json({
       success: false,
       error: error.message,
