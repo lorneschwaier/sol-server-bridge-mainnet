@@ -60,43 +60,48 @@ export default async function handler(req, res) {
 
     console.log("✅ Creator wallet loaded:", signer.publicKey);
 
-    // Step 1: Upload metadata to IPFS with COMPLETE data
-    console.log("📤 Step 1: Uploading complete metadata to IPFS...");
-    
-    let metadataUri;
-    try {
-      const nftMetadata = {
-        name: metadata.name,
-        symbol: "XENO", // ADD SYMBOL FOR PROPER DISPLAY
-        description: metadata.description || "Exclusive NFT from WordPress store purchase - unlock premium content and benefits",
-        image: metadata.image,
-        external_url: "https://x1xo.com", // YOUR WEBSITE
-        attributes: [
-          { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
-          { trait_type: "Platform", value: "WordPress" },
-          { trait_type: "Store", value: "XENO Store" },
-          { trait_type: "Creator", value: "XENO" },
-          { trait_type: "Purchase Date", value: new Date().toISOString().split('T')[0] },
-          { trait_type: "Rarity", value: "Exclusive" },
-          { trait_type: "Utility", value: "Content Access" }
-        ],
-        properties: {
-          files: [{ 
-            uri: metadata.image, 
-            type: "image/png",
-            cdn: true
-          }],
-          category: "image",
-          creators: [{
-            address: signer.publicKey,
-            share: 100
-          }]
-        },
-        collection: {
-          name: "XENO WordPress Store NFTs",
-          family: "XENO"
-        }
-      };
+    // Step 1: First upload the IMAGE to IPFS, then create metadata
+console.log("📤 Step 1: Uploading IMAGE to IPFS first...");
+
+let imageUri;
+try {
+  // Download the image from your server
+  const imageResponse = await axios.get(metadata.image, { responseType: 'arraybuffer' });
+  const imageBuffer = Buffer.from(imageResponse.data);
+  
+  // Upload image to IPFS
+  const imageFormData = new FormData();
+  imageFormData.append('file', new Blob([imageBuffer]), 'nft-image.png');
+  
+  const imageUploadResponse = await axios.post(
+    "https://api.pinata.cloud/pinning/pinFileToIPFS",
+    imageFormData,
+    {
+      headers: {
+        pinata_api_key: process.env.PINATA_API_KEY,
+        pinata_secret_api_key: process.env.PINATA_SECRET_KEY,
+        'Content-Type': 'multipart/form-data'
+      }
+    }
+  );
+  
+  imageUri = `https://gateway.pinata.cloud/ipfs/${imageUploadResponse.data.IpfsHash}`;
+  console.log("✅ Image uploaded to IPFS:", imageUri);
+  
+} catch (imageError) {
+  console.log("⚠️ Using original image URL:", metadata.image);
+  imageUri = metadata.image; // Fallback to original
+}
+
+// Step 2: Now create metadata with the IPFS image
+const nftMetadata = {
+  name: metadata.name,
+  symbol: "XENO",
+  description: metadata.description || "Exclusive NFT from WordPress store purchase",
+  image: imageUri, // Use IPFS image URL
+  external_url: "https://x1xo.com",
+  // ... rest of your metadata
+};
 
       console.log("📋 Complete NFT Metadata:", nftMetadata);
 
