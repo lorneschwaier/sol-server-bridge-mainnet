@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata } = req.body;
 
-    console.log("🚀 === FINAL COMPLETE WORDPRESS NFT WITH WORKING IMAGES ===");
+    console.log("🚀 === FIXED IMAGE UPLOAD VERSION ===");
 
     if (!walletAddress || !metadata || !metadata.image || !metadata.name) {
       return res.status(400).json({
@@ -59,60 +59,91 @@ export default async function handler(req, res) {
 
     console.log("✅ Creator wallet loaded:", signer.publicKey);
 
-    // Step 1: Upload IMAGE to IPFS first
+    // Step 1: Upload IMAGE to IPFS using simple buffer approach
     console.log("📸 Step 1: Uploading image to IPFS...");
+    console.log("🔍 Original image URL:", metadata.image);
     
     let imageUri;
     try {
       // Download image from your WordPress server
+      console.log("📥 Downloading image from:", metadata.image);
       const imageResponse = await axios.get(metadata.image, { 
         responseType: 'arraybuffer',
-        timeout: 30000 
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; NFT-Uploader/1.0)'
+        }
       });
+      
       const imageBuffer = Buffer.from(imageResponse.data);
-      
-      console.log("📥 Downloaded image, size:", imageBuffer.length, "bytes");
+      console.log("✅ Downloaded image, size:", imageBuffer.length, "bytes");
 
-      // Create form data for Pinata file upload
-      const FormData = (await import('form-data')).default;
-      const formData = new FormData();
-      formData.append('file', imageBuffer, {
-        filename: `nft-${metadata.product_id || Date.now()}.png`,
-        contentType: 'image/png'
-      });
+      // Create multipart form data manually (Vercel-compatible way)
+      const boundary = '----formdata-boundary-' + Date.now();
+      const formDataParts = [];
       
-      formData.append('pinataMetadata', JSON.stringify({
+      // Add file part
+      formDataParts.push(`--${boundary}\r\n`);
+      formDataParts.push(`Content-Disposition: form-data; name="file"; filename="nft-${metadata.product_id || Date.now()}.png"\r\n`);
+      formDataParts.push(`Content-Type: image/png\r\n\r\n`);
+      formDataParts.push(imageBuffer);
+      formDataParts.push(`\r\n`);
+      
+      // Add metadata part
+      formDataParts.push(`--${boundary}\r\n`);
+      formDataParts.push(`Content-Disposition: form-data; name="pinataMetadata"\r\n\r\n`);
+      formDataParts.push(JSON.stringify({
         name: `XENO NFT Image #${metadata.product_id || Date.now()}`,
         keyvalues: {
           "type": "nft-image",
           "product": String(metadata.product_id || "unknown")
         }
       }));
+      formDataParts.push(`\r\n--${boundary}--\r\n`);
+
+      // Combine all parts
+      const formDataBuffer = Buffer.concat([
+        Buffer.from(formDataParts[0]),
+        Buffer.from(formDataParts[1]),
+        Buffer.from(formDataParts[2]),
+        formDataParts[3], // image buffer
+        Buffer.from(formDataParts[4]),
+        Buffer.from(formDataParts[5]),
+        Buffer.from(formDataParts[6]),
+        Buffer.from(formDataParts[7]),
+        Buffer.from(formDataParts[8])
+      ]);
+
+      console.log("📤 Uploading to Pinata, total size:", formDataBuffer.length, "bytes");
 
       // Upload to Pinata
       const imageUploadResponse = await axios.post(
         "https://api.pinata.cloud/pinning/pinFileToIPFS",
-        formData,
+        formDataBuffer,
         {
           headers: {
-            ...formData.getHeaders(),
-            pinata_api_key: process.env.PINATA_API_KEY,
-            pinata_secret_api_key: process.env.PINATA_SECRET_KEY
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+            'pinata_api_key': process.env.PINATA_API_KEY,
+            'pinata_secret_api_key': process.env.PINATA_SECRET_KEY
           },
-          timeout: 60000
+          timeout: 60000,
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity
         }
       );
 
       imageUri = `https://gateway.pinata.cloud/ipfs/${imageUploadResponse.data.IpfsHash}`;
-      console.log("✅ Image uploaded to IPFS:", imageUri);
+      console.log("✅ Image uploaded to IPFS successfully!");
+      console.log("🌐 IPFS Image URI:", imageUri);
 
     } catch (imageError) {
-      console.log("⚠️ Image upload failed, using original URL:", imageError.message);
+      console.error("❌ Image upload failed:", imageError.message);
+      console.log("⚠️ Using original image URL as fallback");
       imageUri = metadata.image; // Fallback to original URL
     }
 
     // Step 2: Create complete metadata with IPFS image
-    console.log("📋 Step 2: Creating complete metadata...");
+    console.log("📋 Step 2: Creating metadata with image URI:", imageUri);
     
     let metadataUri;
     try {
@@ -120,7 +151,7 @@ export default async function handler(req, res) {
         name: metadata.name,
         symbol: "XENO",
         description: metadata.description || "Exclusive NFT from XENO WordPress store - unlocks premium content and benefits",
-        image: imageUri, // Use IPFS-hosted image
+        image: imageUri, // Use IPFS-hosted image or fallback
         external_url: "https://x1xo.com",
         animation_url: null,
         attributes: [
@@ -152,7 +183,7 @@ export default async function handler(req, res) {
         }
       };
 
-      console.log("📝 Complete metadata created:", nftMetadata.name);
+      console.log("📝 Metadata created with image:", nftMetadata.image);
 
       // Upload metadata to IPFS
       const metadataResponse = await axios.post(
@@ -179,7 +210,7 @@ export default async function handler(req, res) {
       );
 
       metadataUri = `https://gateway.pinata.cloud/ipfs/${metadataResponse.data.IpfsHash}`;
-      console.log("✅ Complete metadata uploaded to IPFS:", metadataUri);
+      console.log("✅ Metadata uploaded to IPFS:", metadataUri);
 
     } catch (metadataError) {
       console.error("❌ Metadata upload failed:", metadataError.message);
@@ -223,10 +254,10 @@ export default async function handler(req, res) {
         ]
       }).sendAndConfirm(umi);
 
-      console.log("🎉 === NFT CREATED SUCCESSFULLY WITH WORKING IMAGES ===");
+      console.log("🎉 === NFT CREATED WITH FIXED IMAGE UPLOAD ===");
       console.log("🔗 Asset address:", asset.publicKey);
       console.log("📝 Transaction signature:", result.signature);
-      console.log("🖼️ Image URI:", imageUri);
+      console.log("🖼️ Final Image URI:", imageUri);
       console.log("📋 Metadata URI:", metadataUri);
       console.log("👤 Owner:", walletAddress);
 
@@ -243,20 +274,12 @@ export default async function handler(req, res) {
         explorerUrl: `https://explorer.solana.com/address/${asset.publicKey}`,
         magicEdenUrl: `https://magiceden.io/item-details/${asset.publicKey}`,
         solscanUrl: `https://solscan.io/token/${asset.publicKey}`,
-        message: "COMPLETE NFT with working images and full metadata created successfully!",
+        message: "NFT created successfully with fixed image upload!",
         type: "metaplex-core",
-        metadata: {
-          name: metadata.name,
-          symbol: "XENO",
-          description: metadata.description || "Exclusive NFT from XENO WordPress store",
-          image: imageUri,
-          external_url: "https://x1xo.com",
-          attributes: [
-            { trait_type: "Platform", value: "WordPress" },
-            { trait_type: "Store", value: "XENO" },
-            { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
-            { trait_type: "Utility", value: "Content Access" }
-          ]
+        debug: {
+          originalImageUrl: metadata.image,
+          ipfsImageUrl: imageUri,
+          metadataUrl: metadataUri
         }
       });
 
