@@ -1,229 +1,406 @@
-import { Buffer } from 'buffer';
-globalThis.Buffer = Buffer;
+const { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } = require("@solana/web3.js")
+const { createUmi } = require("@metaplex-foundation/umi-bundle-defaults")
+const { createV1, mplCore, ruleSet } = require("@metaplex-foundation/mpl-core")
+const { keypairIdentity, generateSigner, publicKey, some, none } = require("@metaplex-foundation/umi")
+const { fromWeb3JsKeypair } = require("@metaplex-foundation/umi-web3js-adapters")
+const axios = require("axios")
+const bs58 = require("bs58")
 
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+// Environment variables
+const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
+const SOLANA_RPC_URL =
+  process.env.SOLANA_RPC_URL ||
+  (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
+const PINATA_API_KEY = process.env.PINATA_API_KEY
+const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
+const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
 
+// Initialize Solana connection
+const connection = new Connection(SOLANA_RPC_URL, "confirmed")
+
+// Initialize creator keypair and UMI
+let creatorKeypair = null
+let creatorUmi = null
+
+if (CREATOR_PRIVATE_KEY) {
   try {
-    const { walletAddress, metadata } = req.body;
+    console.log("🔑 Loading creator wallet...")
 
-    console.log("🚀 === FIXED NODE.JS PINATA UPLOAD ===");
-    console.log("📋 Original image URL:", metadata.image);
-
-    if (!walletAddress || !metadata || !metadata.image || !metadata.name) {
-      return res.status(400).json({
-        success: false,
-        error: "Missing required fields"
-      });
+    let privateKeyArray
+    if (CREATOR_PRIVATE_KEY.startsWith("[")) {
+      privateKeyArray = JSON.parse(CREATOR_PRIVATE_KEY)
+    } else {
+      privateKeyArray = Array.from(bs58.decode(CREATOR_PRIVATE_KEY))
     }
 
-    // Import libraries
-    const { create, mplCore } = await import('@metaplex-foundation/mpl-core');
-    const { createUmi } = await import('@metaplex-foundation/umi-bundle-defaults');
-    const { 
-      createSignerFromKeypair, 
-      signerIdentity, 
-      generateSigner,
-      publicKey
-    } = await import('@metaplex-foundation/umi');
-    const { irysUploader } = await import('@metaplex-foundation/umi-uploader-irys');
-    const bs58 = (await import("bs58")).default;
-    const axios = (await import("axios")).default;
+    creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
+    console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
 
-    // Setup Umi
-    const umi = createUmi("https://api.mainnet-beta.solana.com")
-      .use(mplCore())
-      .use(irysUploader());
+    const umi = createUmi(SOLANA_RPC_URL).use(mplCore())
+    const umiKeypair = fromWeb3JsKeypair(creatorKeypair)
+    creatorUmi = umi.use(keypairIdentity(umiKeypair))
 
-    // Setup signer
-    let privateKeyArray;
-    try {
-      const privateKey = process.env.CREATOR_PRIVATE_KEY.trim();
-      if (privateKey.startsWith("[")) {
-        privateKeyArray = JSON.parse(privateKey);
-      } else {
-        const decoded = bs58.decode(privateKey);
-        privateKeyArray = Array.from(decoded);
-      }
-    } catch (error) {
-      return res.status(500).json({ success: false, error: "Invalid CREATOR_PRIVATE_KEY" });
+    console.log("⚡ Metaplex Core UMI initialized successfully")
+  } catch (error) {
+    console.error("❌ Error loading creator keypair:", error.message)
+  }
+}
+
+// Upload image to Pinata IPFS
+async function uploadImageToPinata(imageUrl) {
+  try {
+    if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
+      throw new Error("Pinata API credentials not configured")
     }
 
-    const creatorKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(privateKeyArray));
-    const signer = createSignerFromKeypair(umi, creatorKeypair);
-    umi.use(signerIdentity(signer));
+    console.log("📥 Downloading image from:", imageUrl)
 
-    console.log("✅ Creator wallet:", signer.publicKey);
+    // Download the image
+    const imageResponse = await axios.get(imageUrl, {
+      responseType: "arraybuffer",
+      timeout: 30000,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+    })
 
-    // Step 1: Download and upload image to Pinata using correct Node.js approach
-    console.log("📸 Step 1: Downloading image from WordPress...");
-    
-    let finalImageUri;
-    try {
-      // Download image from WordPress
-      const imageResponse = await axios.get(metadata.image, { 
-        responseType: 'arraybuffer',
-        timeout: 30000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; NFT-Bot/1.0)'
-        }
-      });
-      
-      const imageBuffer = Buffer.from(imageResponse.data);
-      console.log("✅ Downloaded image successfully:", imageBuffer.length, "bytes");
+    console.log("✅ Image downloaded, size:", imageResponse.data.length, "bytes")
 
-      // Create proper multipart form data for Node.js
-      const boundary = `----formdata-pinata-${Date.now()}`;
-      const CRLF = '\r\n';
-      
-      // Build form data manually
-      let formData = '';
-      formData += `--${boundary}${CRLF}`;
-      formData += `Content-Disposition: form-data; name="file"; filename="nft-image-${Date.now()}.png"${CRLF}`;
-      formData += `Content-Type: image/png${CRLF}${CRLF}`;
-      
-      // Convert form data to buffer and add image
-      const formDataPrefix = Buffer.from(formData, 'utf8');
-      const formDataSuffix = Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf8');
-      const fullFormData = Buffer.concat([formDataPrefix, imageBuffer, formDataSuffix]);
-
-      console.log("📤 Uploading to Pinata...");
-      
-      // Upload to Pinata with proper headers
-      const uploadResponse = await axios.post(
-        'https://api.pinata.cloud/pinning/pinFileToIPFS',
-        fullFormData,
-        {
-          headers: {
-            'Content-Type': `multipart/form-data; boundary=${boundary}`,
-            'pinata_api_key': process.env.PINATA_API_KEY,
-            'pinata_secret_api_key': process.env.PINATA_SECRET_KEY
-          },
-          timeout: 60000,
-          maxContentLength: Infinity,
-          maxBodyLength: Infinity
-        }
-      );
-
-      finalImageUri = `https://gateway.pinata.cloud/ipfs/${uploadResponse.data.IpfsHash}`;
-      console.log("🎉 IMAGE UPLOADED TO PINATA SUCCESSFULLY!");
-      console.log("🌐 IPFS Image URI:", finalImageUri);
-
-    } catch (imageError) {
-      console.error("❌ Image upload failed:", imageError.message);
-      console.log("⚠️ Using original WordPress image as fallback");
-      finalImageUri = metadata.image;
+    // Get file extension from URL or content type
+    let fileExtension = "png"
+    if (imageUrl.includes(".jpg") || imageUrl.includes(".jpeg")) {
+      fileExtension = "jpg"
+    } else if (imageUrl.includes(".gif")) {
+      fileExtension = "gif"
+    } else if (imageUrl.includes(".webp")) {
+      fileExtension = "webp"
     }
 
-    // Step 2: Create metadata with the uploaded image
-    console.log("📋 Step 2: Creating metadata...");
-    
-    const nftMetadata = {
-      name: metadata.name,
-      symbol: "XENO",
-      description: metadata.description || "Exclusive NFT from XENO WordPress store",
-      image: finalImageUri, // This should now be a real IPFS URL
-      external_url: "https://x1xo.com",
-      attributes: [
-        { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
-        { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Store", value: "XENO" },
-        { trait_type: "Creator", value: "XENO" },
-        { trait_type: "Purchase Date", value: new Date().toISOString().split('T')[0] },
-        { trait_type: "Type", value: "Store Purchase NFT" }
-      ],
-      properties: {
-        files: [{ 
-          uri: finalImageUri, 
-          type: "image/png"
-        }],
-        category: "image",
-        creators: [{
-          address: signer.publicKey,
-          verified: true,
-          share: 100
-        }]
-      }
-    };
+    // Create form data for Pinata
+    const FormData = require("form-data")
+    const form = new FormData()
 
-    console.log("📝 Metadata with image:", finalImageUri);
+    form.append("file", Buffer.from(imageResponse.data), {
+      filename: `nft-image-${Date.now()}.${fileExtension}`,
+      contentType: imageResponse.headers["content-type"] || `image/${fileExtension}`,
+    })
 
-    // Upload metadata to Pinata
-    const metadataResponse = await axios.post(
+    form.append(
+      "pinataMetadata",
+      JSON.stringify({
+        name: `nft-image-${Date.now()}.${fileExtension}`,
+      }),
+    )
+
+    console.log("📤 Uploading image to Pinata IPFS...")
+
+    const pinataResponse = await axios.post("https://api.pinata.cloud/pinning/pinFileToIPFS", form, {
+      headers: {
+        ...form.getHeaders(),
+        pinata_api_key: PINATA_API_KEY,
+        pinata_secret_api_key: PINATA_SECRET_KEY,
+      },
+      timeout: 60000,
+    })
+
+    const imageIpfsUrl = `https://gateway.pinata.cloud/ipfs/${pinataResponse.data.IpfsHash}`
+    console.log("✅ Image uploaded to IPFS:", imageIpfsUrl)
+
+    return {
+      success: true,
+      url: imageIpfsUrl,
+      cid: pinataResponse.data.IpfsHash,
+      service: "pinata",
+    }
+  } catch (error) {
+    console.error("❌ Image upload failed:", error.message)
+    return {
+      success: false,
+      error: error.message,
+      service: "pinata",
+    }
+  }
+}
+
+// Upload metadata to Pinata
+async function uploadToPinata(metadata) {
+  try {
+    if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
+      throw new Error("Pinata API credentials not configured")
+    }
+
+    console.log("📤 Uploading metadata to Pinata...")
+
+    const response = await axios.post(
       "https://api.pinata.cloud/pinning/pinJSONToIPFS",
       {
-        pinataContent: nftMetadata,
-        pinataMetadata: { 
-          name: `xeno-nft-metadata-${Date.now()}.json`
-        }
+        pinataContent: metadata,
+        pinataMetadata: {
+          name: `nft-metadata-${Date.now()}.json`,
+        },
       },
       {
         headers: {
-          pinata_api_key: process.env.PINATA_API_KEY,
-          pinata_secret_api_key: process.env.PINATA_SECRET_KEY
-        }
+          pinata_api_key: PINATA_API_KEY,
+          pinata_secret_api_key: PINATA_SECRET_KEY,
+        },
+        timeout: 30000,
+      },
+    )
+
+    const metadataUrl = `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`
+    console.log("✅ Metadata uploaded to Pinata:", metadataUrl)
+
+    return {
+      success: true,
+      url: metadataUrl,
+      cid: response.data.IpfsHash,
+      service: "pinata",
+    }
+  } catch (error) {
+    console.error("❌ Pinata upload failed:", error.message)
+    return {
+      success: false,
+      error: error.message,
+      service: "pinata",
+    }
+  }
+}
+
+// Real NFT Minting with Metaplex Core
+async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
+  try {
+    if (!creatorUmi) {
+      throw new Error("Metaplex Core UMI not initialized - creator private key required")
+    }
+
+    console.log("🎨 === STARTING REAL NFT MINT WITH METAPLEX CORE ===")
+    console.log("👤 Recipient:", walletAddress)
+    console.log("📋 Metadata URL:", metadataUrl)
+    console.log("🏷️ NFT Name:", metadata.name)
+
+    // Check creator wallet balance
+    const balance = await connection.getBalance(creatorKeypair.publicKey)
+    console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
+
+    if (balance < 0.01 * LAMPORTS_PER_SOL) {
+      throw new Error(
+        `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet.`,
+      )
+    }
+
+    // Generate asset signer
+    const asset = generateSigner(creatorUmi)
+    console.log("🔑 Generated asset address:", asset.publicKey)
+
+    // Prepare collection (if provided)
+    let collectionConfig = none()
+    if (metadata.collection && metadata.collection.trim()) {
+      try {
+        const collectionPubkey = publicKey(metadata.collection.trim())
+        collectionConfig = some({ key: collectionPubkey, verified: false })
+        console.log("📁 Collection configured:", metadata.collection)
+      } catch (error) {
+        console.log("⚠️ Invalid collection address, proceeding without collection")
       }
-    );
+    }
 
-    const metadataUri = `https://gateway.pinata.cloud/ipfs/${metadataResponse.data.IpfsHash}`;
-    console.log("✅ Metadata uploaded to IPFS:", metadataUri);
+    // Prepare plugins (for royalties, attributes, etc.)
+    const plugins = []
 
-    // Step 3: Create NFT
-    console.log("🎨 Step 3: Creating NFT...");
-    
-    const asset = generateSigner(umi);
-    
-    const result = await create(umi, {
+    // Add royalty plugin if specified
+    if (metadata.royalty && metadata.royalty > 0) {
+      plugins.push({
+        type: "Royalties",
+        basisPoints: metadata.royalty * 100,
+        creators: [
+          {
+            address: creatorKeypair.publicKey.toString(),
+            percentage: 100,
+          },
+        ],
+        ruleSet: ruleSet("None"),
+      })
+      console.log("💎 Royalty configured:", metadata.royalty + "%")
+    }
+
+    // Add attributes plugin if provided
+    if (metadata.attributes && Array.isArray(metadata.attributes) && metadata.attributes.length > 0) {
+      plugins.push({
+        type: "Attributes",
+        attributeList: metadata.attributes.map((attr) => ({
+          key: attr.trait_type || attr.key || "trait",
+          value: attr.value || "unknown",
+        })),
+      })
+      console.log("🏷️ Attributes configured:", metadata.attributes.length, "traits")
+    }
+
+    console.log("⚡ Creating NFT with Metaplex Core...")
+
+    // Create the NFT using Metaplex Core
+    const createInstruction = createV1(creatorUmi, {
       asset,
-      name: metadata.name,
-      uri: metadataUri,
-      owner: publicKey(walletAddress),
-      plugins: [
-        {
-          type: 'Attributes',
-          attributeList: [
-            { key: 'Platform', value: 'WordPress' },
-            { key: 'Store', value: 'XENO' },
-            { key: 'Symbol', value: 'XENO' }
-          ]
-        }
-      ]
-    }).sendAndConfirm(umi);
+      name: metadata.name || "Unnamed NFT",
+      uri: metadataUrl,
+      collection: collectionConfig,
+      plugins: plugins.length > 0 ? plugins : undefined,
+    })
 
-    console.log("🎉 === NFT CREATED WITH REAL IPFS IMAGE ===");
-    console.log("🔗 Asset:", asset.publicKey);
-    console.log("📝 Signature:", result.signature);
-    console.log("🖼️ Final Image URI:", finalImageUri);
-    console.log("📋 Metadata URI:", metadataUri);
+    // Execute the transaction
+    console.log("📡 Submitting transaction to Solana...")
+    const result = await createInstruction.sendAndConfirm(creatorUmi, {
+      confirm: { commitment: "confirmed" },
+      send: { skipPreflight: false },
+    })
 
-    return res.status(200).json({
+    console.log("🎉 === NFT MINTED SUCCESSFULLY WITH METAPLEX CORE! ===")
+    console.log("🔗 Asset address:", asset.publicKey)
+    console.log("📝 Transaction signature:", result.signature)
+
+    const explorerUrl = `https://explorer.solana.com/address/${asset.publicKey}${
+      SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""
+    }`
+
+    return {
       success: true,
       mintAddress: asset.publicKey,
       transactionSignature: result.signature,
-      metadataUri: metadataUri,
-      imageUri: finalImageUri,
-      name: metadata.name,
-      symbol: "XENO",
-      explorerUrl: `https://explorer.solana.com/address/${asset.publicKey}`,
-      magicEdenUrl: `https://magiceden.io/item-details/${asset.publicKey}`,
-      message: "NFT created with real IPFS image!",
-      debug: {
-        originalImageUrl: metadata.image,
-        ipfsImageUrl: finalImageUri,
-        imageUploadedToIPFS: finalImageUri !== metadata.image
-      }
-    });
-
+      metadataUrl: metadataUrl,
+      explorerUrl: explorerUrl,
+      method: "metaplex_core",
+      network: SOLANA_NETWORK,
+    }
   } catch (error) {
-    console.error("❌ Complete failure:", error);
-    return res.status(500).json({
+    console.error("❌ Metaplex Core minting failed:", error)
+    return {
       success: false,
-      error: error.message
-    });
+      error: error.message,
+      method: "metaplex_core",
+    }
+  }
+}
+
+export default async function handler(req, res) {
+  // Set CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "*")
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+
+  if (req.method === "OPTIONS") {
+    res.status(200).end()
+    return
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, error: "Method not allowed" })
+  }
+
+  try {
+    const { walletAddress, metadata } = req.body
+
+    console.log("🎨 === REAL NFT MINTING REQUEST (METAPLEX CORE) ===")
+    console.log("👤 Wallet:", walletAddress)
+    console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
+
+    if (!walletAddress || !metadata) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields: walletAddress and metadata",
+      })
+    }
+
+    // Validate wallet address
+    try {
+      new PublicKey(walletAddress)
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid wallet address format",
+      })
+    }
+
+    // Step 1: Upload image to IPFS if provided
+    let finalImageUrl = metadata.image
+    if (metadata.image && !metadata.image.includes("ipfs")) {
+      console.log("📸 Step 1: Uploading image to IPFS...")
+      const imageUploadResult = await uploadImageToPinata(metadata.image)
+
+      if (imageUploadResult.success) {
+        finalImageUrl = imageUploadResult.url
+        console.log("✅ Image uploaded successfully:", finalImageUrl)
+      } else {
+        console.warn("⚠️ Image upload failed, using original URL:", imageUploadResult.error)
+        // Continue with original URL if upload fails
+      }
+    }
+
+    // Step 2: Create final metadata with proper image URL
+    const finalMetadata = {
+      name: metadata.name || "WordPress NFT",
+      description: metadata.description || "NFT created via WordPress store",
+      image: finalImageUrl,
+      attributes: [
+        { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
+        { trait_type: "Platform", value: "WordPress" },
+        { trait_type: "Creator", value: "WordPress Store" },
+        { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
+        ...(metadata.attributes || []),
+      ],
+      properties: {
+        files: [
+          {
+            uri: finalImageUrl,
+            type: finalImageUrl.includes(".jpg") || finalImageUrl.includes(".jpeg") ? "image/jpeg" : "image/png",
+          },
+        ],
+        category: "image",
+      },
+    }
+
+    console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
+
+    // Step 3: Upload metadata to IPFS
+    console.log("📤 Step 2: Uploading metadata...")
+    const uploadResult = await uploadToPinata(finalMetadata)
+
+    if (!uploadResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: "Failed to upload metadata: " + uploadResult.error,
+      })
+    }
+
+    // Step 4: Mint NFT with Metaplex Core
+    console.log("⚡ Step 3: Minting NFT with Metaplex Core...")
+    const mintResult = await mintNFTWithMetaplexCore(walletAddress, finalMetadata, uploadResult.url)
+
+    if (!mintResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: "Failed to mint NFT: " + mintResult.error,
+        metadataUrl: uploadResult.url,
+      })
+    }
+
+    console.log("🎉 === NFT MINTING COMPLETE (METAPLEX CORE) ===")
+
+    res.json({
+      success: true,
+      mintAddress: mintResult.mintAddress,
+      transactionSignature: mintResult.transactionSignature,
+      metadataUrl: uploadResult.url,
+      imageUrl: finalImageUrl,
+      explorerUrl: mintResult.explorerUrl,
+      network: SOLANA_NETWORK,
+      method: "metaplex_core",
+      message: "NFT minted successfully on Solana with Metaplex Core!",
+    })
+  } catch (error) {
+    console.error("❌ Mint NFT error:", error)
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    })
   }
 }
