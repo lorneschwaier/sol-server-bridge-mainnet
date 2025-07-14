@@ -1,10 +1,11 @@
-const { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } = require("@solana/web3.js")
-const { createUmi } = require("@metaplex-foundation/umi-bundle-defaults")
-const { createV1, mplCore, ruleSet } = require("@metaplex-foundation/mpl-core")
-const { keypairIdentity, generateSigner, publicKey, some, none } = require("@metaplex-foundation/umi")
-const { fromWeb3JsKeypair } = require("@metaplex-foundation/umi-web3js-adapters")
-const axios = require("axios")
-const bs58 = require("bs58")
+import { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } from "@solana/web3.js"
+import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
+import { createV1, mplCore, ruleSet } from "@metaplex-foundation/mpl-core"
+import { keypairIdentity, generateSigner, publicKey, some, none } from "@metaplex-foundation/umi"
+import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
+import axios from "axios"
+import bs58 from "bs58"
+import FormData from "form-data"
 
 // Environment variables
 const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
@@ -77,7 +78,6 @@ async function uploadImageToPinata(imageUrl) {
     }
 
     // Create form data for Pinata
-    const FormData = require("form-data")
     const form = new FormData()
 
     form.append("file", Buffer.from(imageResponse.data), {
@@ -282,10 +282,11 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
 }
 
 export default async function handler(req, res) {
-  // Set CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*")
+  // Set CORS headers - FIXED FOR YOUR WEBSITE
+  res.setHeader("Access-Control-Allow-Origin", "https://x1xo.com")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+  res.setHeader("Access-Control-Allow-Credentials", "true")
 
   if (req.method === "OPTIONS") {
     res.status(200).end()
