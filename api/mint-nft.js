@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata } = req.body;
 
-    console.log("🚀 === COMPLETE WORKING WORDPRESS + METAPLEX CORE NFT ===");
+    console.log("🚀 === FINAL COMPLETE WORDPRESS NFT WITH WORKING IMAGES ===");
 
     if (!walletAddress || !metadata || !metadata.image || !metadata.name) {
       return res.status(400).json({
@@ -21,26 +21,25 @@ export default async function handler(req, res) {
       });
     }
 
-    // Import Metaplex Core libraries (the NEW working way)
+    // Import Metaplex Core libraries
     const { create, mplCore } = await import('@metaplex-foundation/mpl-core');
     const { createUmi } = await import('@metaplex-foundation/umi-bundle-defaults');
     const { 
       createSignerFromKeypair, 
       signerIdentity, 
-      generateSigner, 
-      createGenericFile,
+      generateSigner,
       publicKey
     } = await import('@metaplex-foundation/umi');
     const { irysUploader } = await import('@metaplex-foundation/umi-uploader-irys');
     const bs58 = (await import("bs58")).default;
     const axios = (await import("axios")).default;
 
-    // Setup Umi (Metaplex's new framework) - THIS FIXES ALL THE ERRORS
+    // Setup Umi framework
     const umi = createUmi("https://api.mainnet-beta.solana.com")
       .use(mplCore())
       .use(irysUploader());
 
-    // Parse private key and setup signer (THIS IS WHAT WAS MISSING)
+    // Setup creator signer
     let privateKeyArray;
     try {
       const privateKey = process.env.CREATOR_PRIVATE_KEY.trim();
@@ -60,61 +59,113 @@ export default async function handler(req, res) {
 
     console.log("✅ Creator wallet loaded:", signer.publicKey);
 
-    // Step 1: First upload the IMAGE to IPFS, then create metadata
-console.log("📤 Step 1: Uploading IMAGE to IPFS first...");
+    // Step 1: Upload IMAGE to IPFS first
+    console.log("📸 Step 1: Uploading image to IPFS...");
+    
+    let imageUri;
+    try {
+      // Download image from your WordPress server
+      const imageResponse = await axios.get(metadata.image, { 
+        responseType: 'arraybuffer',
+        timeout: 30000 
+      });
+      const imageBuffer = Buffer.from(imageResponse.data);
+      
+      console.log("📥 Downloaded image, size:", imageBuffer.length, "bytes");
 
-let imageUri;
-try {
-  // Download the image from your server
-  const imageResponse = await axios.get(metadata.image, { responseType: 'arraybuffer' });
-  const imageBuffer = Buffer.from(imageResponse.data);
-  
-  // Upload image to IPFS
-  const imageFormData = new FormData();
-  imageFormData.append('file', new Blob([imageBuffer]), 'nft-image.png');
-  
-  const imageUploadResponse = await axios.post(
-    "https://api.pinata.cloud/pinning/pinFileToIPFS",
-    imageFormData,
-    {
-      headers: {
-        pinata_api_key: process.env.PINATA_API_KEY,
-        pinata_secret_api_key: process.env.PINATA_SECRET_KEY,
-        'Content-Type': 'multipart/form-data'
-      }
+      // Create form data for Pinata file upload
+      const FormData = (await import('form-data')).default;
+      const formData = new FormData();
+      formData.append('file', imageBuffer, {
+        filename: `nft-${metadata.product_id || Date.now()}.png`,
+        contentType: 'image/png'
+      });
+      
+      formData.append('pinataMetadata', JSON.stringify({
+        name: `XENO NFT Image #${metadata.product_id || Date.now()}`,
+        keyvalues: {
+          "type": "nft-image",
+          "product": String(metadata.product_id || "unknown")
+        }
+      }));
+
+      // Upload to Pinata
+      const imageUploadResponse = await axios.post(
+        "https://api.pinata.cloud/pinning/pinFileToIPFS",
+        formData,
+        {
+          headers: {
+            ...formData.getHeaders(),
+            pinata_api_key: process.env.PINATA_API_KEY,
+            pinata_secret_api_key: process.env.PINATA_SECRET_KEY
+          },
+          timeout: 60000
+        }
+      );
+
+      imageUri = `https://gateway.pinata.cloud/ipfs/${imageUploadResponse.data.IpfsHash}`;
+      console.log("✅ Image uploaded to IPFS:", imageUri);
+
+    } catch (imageError) {
+      console.log("⚠️ Image upload failed, using original URL:", imageError.message);
+      imageUri = metadata.image; // Fallback to original URL
     }
-  );
-  
-  imageUri = `https://gateway.pinata.cloud/ipfs/${imageUploadResponse.data.IpfsHash}`;
-  console.log("✅ Image uploaded to IPFS:", imageUri);
-  
-} catch (imageError) {
-  console.log("⚠️ Using original image URL:", metadata.image);
-  imageUri = metadata.image; // Fallback to original
-}
 
-// Step 2: Now create metadata with the IPFS image
-const nftMetadata = {
-  name: metadata.name,
-  symbol: "XENO",
-  description: metadata.description || "Exclusive NFT from WordPress store purchase",
-  image: imageUri, // Use IPFS image URL
-  external_url: "https://x1xo.com",
-  // ... rest of your metadata
-};
+    // Step 2: Create complete metadata with IPFS image
+    console.log("📋 Step 2: Creating complete metadata...");
+    
+    let metadataUri;
+    try {
+      const nftMetadata = {
+        name: metadata.name,
+        symbol: "XENO",
+        description: metadata.description || "Exclusive NFT from XENO WordPress store - unlocks premium content and benefits",
+        image: imageUri, // Use IPFS-hosted image
+        external_url: "https://x1xo.com",
+        animation_url: null,
+        attributes: [
+          { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
+          { trait_type: "Platform", value: "WordPress" },
+          { trait_type: "Store", value: "XENO Store" },
+          { trait_type: "Creator", value: "XENO" },
+          { trait_type: "Purchase Date", value: new Date().toISOString().split('T')[0] },
+          { trait_type: "Rarity", value: "Exclusive" },
+          { trait_type: "Utility", value: "Content Access" },
+          { trait_type: "Type", value: "Store Purchase NFT" }
+        ],
+        properties: {
+          files: [{ 
+            uri: imageUri, 
+            type: "image/png",
+            cdn: false
+          }],
+          category: "image",
+          creators: [{
+            address: signer.publicKey,
+            verified: true,
+            share: 100
+          }]
+        },
+        collection: {
+          name: "XENO WordPress Store NFTs",
+          family: "XENO"
+        }
+      };
 
-      console.log("📋 Complete NFT Metadata:", nftMetadata);
+      console.log("📝 Complete metadata created:", nftMetadata.name);
 
-      const pinataResponse = await axios.post(
+      // Upload metadata to IPFS
+      const metadataResponse = await axios.post(
         "https://api.pinata.cloud/pinning/pinJSONToIPFS",
         {
           pinataContent: nftMetadata,
           pinataMetadata: { 
-            name: `xeno-wordpress-nft-${metadata.product_id || Date.now()}.json`,
+            name: `xeno-nft-metadata-${metadata.product_id || Date.now()}.json`,
             keyvalues: {
               "platform": "wordpress",
               "store": "xeno",
-              "product": String(metadata.product_id || "unknown")
+              "product": String(metadata.product_id || "unknown"),
+              "type": "nft-metadata"
             }
           }
         },
@@ -127,34 +178,35 @@ const nftMetadata = {
         }
       );
 
-      metadataUri = `https://gateway.pinata.cloud/ipfs/${pinataResponse.data.IpfsHash}`;
+      metadataUri = `https://gateway.pinata.cloud/ipfs/${metadataResponse.data.IpfsHash}`;
       console.log("✅ Complete metadata uploaded to IPFS:", metadataUri);
 
-    } catch (ipfsError) {
-      console.error("❌ IPFS upload failed:", ipfsError.message);
+    } catch (metadataError) {
+      console.error("❌ Metadata upload failed:", metadataError.message);
       return res.status(500).json({
         success: false,
         error: "Metadata upload failed - transaction cancelled"
       });
     }
 
-    // Step 2: Create NFT with Metaplex Core (THE WORKING SOLUTION)
-    console.log("🎨 Step 2: Creating complete NFT with Metaplex Core...");
+    // Step 3: Create NFT with Metaplex Core
+    console.log("🎨 Step 3: Creating NFT with Metaplex Core...");
     
     try {
       const asset = generateSigner(umi);
       
-      console.log("🔍 Creating NFT with these details:");
+      console.log("🔍 Creating NFT:");
       console.log("   - Asset address:", asset.publicKey);
       console.log("   - Owner:", walletAddress);
       console.log("   - Name:", metadata.name);
-      console.log("   - URI:", metadataUri);
+      console.log("   - Image URI:", imageUri);
+      console.log("   - Metadata URI:", metadataUri);
       
       const result = await create(umi, {
         asset,
         name: metadata.name,
         uri: metadataUri,
-        owner: publicKey(walletAddress), // Convert to Umi publicKey format
+        owner: publicKey(walletAddress),
         plugins: [
           {
             type: 'Attributes',
@@ -164,54 +216,55 @@ const nftMetadata = {
               { key: 'Product ID', value: String(metadata.product_id || 'unknown') },
               { key: 'Purchase Date', value: new Date().toISOString().split('T')[0] },
               { key: 'Symbol', value: 'XENO' },
-              { key: 'Type', value: 'Store Purchase NFT' }
+              { key: 'Type', value: 'Store Purchase NFT' },
+              { key: 'Utility', value: 'Content Access' }
             ]
           }
         ]
       }).sendAndConfirm(umi);
 
-      console.log("🎉 === NFT CREATED SUCCESSFULLY WITH FULL METADATA ===");
+      console.log("🎉 === NFT CREATED SUCCESSFULLY WITH WORKING IMAGES ===");
       console.log("🔗 Asset address:", asset.publicKey);
       console.log("📝 Transaction signature:", result.signature);
-      console.log("🌐 Metadata URI:", metadataUri);
+      console.log("🖼️ Image URI:", imageUri);
+      console.log("📋 Metadata URI:", metadataUri);
       console.log("👤 Owner:", walletAddress);
-      console.log("🎯 Type: Metaplex Core NFT");
 
-      // Return comprehensive response
       return res.status(200).json({
         success: true,
         mintAddress: asset.publicKey,
-        assetAddress: asset.publicKey, // Core NFTs use asset address
+        assetAddress: asset.publicKey,
         transactionSignature: result.signature,
         metadataUri: metadataUri,
+        imageUri: imageUri,
         owner: walletAddress,
         name: metadata.name,
         symbol: "XENO",
         explorerUrl: `https://explorer.solana.com/address/${asset.publicKey}`,
         magicEdenUrl: `https://magiceden.io/item-details/${asset.publicKey}`,
         solscanUrl: `https://solscan.io/token/${asset.publicKey}`,
-        message: "COMPLETE NFT with full metadata, symbol, and attributes created successfully using Metaplex Core!",
+        message: "COMPLETE NFT with working images and full metadata created successfully!",
         type: "metaplex-core",
         metadata: {
           name: metadata.name,
           symbol: "XENO",
-          description: metadata.description || "Exclusive NFT from WordPress store purchase",
-          image: metadata.image,
+          description: metadata.description || "Exclusive NFT from XENO WordPress store",
+          image: imageUri,
+          external_url: "https://x1xo.com",
           attributes: [
             { trait_type: "Platform", value: "WordPress" },
             { trait_type: "Store", value: "XENO" },
-            { trait_type: "Product ID", value: String(metadata.product_id || "unknown") }
+            { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
+            { trait_type: "Utility", value: "Content Access" }
           ]
         }
       });
 
     } catch (coreError) {
-      console.error("❌ Metaplex Core creation failed:", coreError.message);
-      console.error("❌ Full error:", coreError);
+      console.error("❌ NFT creation failed:", coreError.message);
       return res.status(500).json({
         success: false,
-        error: "NFT creation failed: " + coreError.message,
-        details: coreError.toString()
+        error: "NFT creation failed: " + coreError.message
       });
     }
 
@@ -219,8 +272,7 @@ const nftMetadata = {
     console.error("❌ COMPLETE SYSTEM FAILURE:", error);
     return res.status(500).json({
       success: false,
-      error: "Complete system failure: " + error.message,
-      stack: error.stack
+      error: "System failure: " + error.message
     });
   }
 }
