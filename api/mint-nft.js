@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata } = req.body;
 
-    console.log("🔥 === FINAL WORKING NFT WITH METADATA ===");
+    console.log("🚀 === WORDPRESS + METAPLEX CORE NFT CREATION ===");
 
     if (!walletAddress || !metadata || !metadata.image || !metadata.name) {
       return res.status(400).json({
@@ -21,14 +21,25 @@ export default async function handler(req, res) {
       });
     }
 
-    const { Connection, PublicKey, Keypair } = await import("@solana/web3.js");
-    const { createMint, getOrCreateAssociatedTokenAccount, mintTo } = await import("@solana/spl-token");
+    // Import Metaplex Core libraries (the NEW way)
+    const { create, mplCore } = await import('@metaplex-foundation/mpl-core');
+    const { createUmi } = await import('@metaplex-foundation/umi-bundle-defaults');
+    const { 
+      createSignerFromKeypair, 
+      signerIdentity, 
+      generateSigner, 
+      createGenericFile 
+    } = await import('@metaplex-foundation/umi');
+    const { irysUploader } = await import('@metaplex-foundation/umi-uploader-irys');
     const bs58 = (await import("bs58")).default;
     const axios = (await import("axios")).default;
 
-    const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
+    // Setup Umi (Metaplex's new framework)
+    const umi = createUmi("https://api.mainnet-beta.solana.com")
+      .use(mplCore())
+      .use(irysUploader());
 
-    // Parse private key
+    // Parse private key and setup signer (THIS FIXES THE getPublicKey ERROR)
     let privateKeyArray;
     try {
       const privateKey = process.env.CREATOR_PRIVATE_KEY.trim();
@@ -42,18 +53,11 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: "Invalid CREATOR_PRIVATE_KEY format" });
     }
 
-    const creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
-    console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString());
+    const creatorKeypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(privateKeyArray));
+    const signer = createSignerFromKeypair(umi, creatorKeypair);
+    umi.use(signerIdentity(signer));
 
-    const balanceBefore = await connection.getBalance(creatorKeypair.publicKey);
-    console.log("💰 Creator wallet balance:", balanceBefore / 1e9, "SOL");
-    
-    if (balanceBefore < 0.02 * 1e9) {
-      return res.status(500).json({
-        success: false,
-        error: `Insufficient SOL for NFT creation. Balance: ${balanceBefore / 1e9} SOL. Need at least 0.02 SOL.`
-      });
-    }
+    console.log("✅ Creator wallet loaded:", signer.publicKey);
 
     // Step 1: Upload metadata to IPFS
     console.log("📤 Step 1: Uploading metadata to IPFS...");
@@ -62,13 +66,13 @@ export default async function handler(req, res) {
     try {
       const nftMetadata = {
         name: metadata.name,
-        description: metadata.description || "NFT created via WordPress store",
+        description: metadata.description || "NFT created from WordPress store purchase",
         image: metadata.image,
         attributes: [
           { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
           { trait_type: "Platform", value: "WordPress" },
           { trait_type: "Creator", value: "WordPress Store" },
-          { trait_type: "Minted Date", value: new Date().toISOString().split('T')[0] }
+          { trait_type: "Purchase Date", value: new Date().toISOString().split('T')[0] }
         ],
         properties: {
           files: [{ uri: metadata.image, type: "image/png" }],
@@ -102,122 +106,42 @@ export default async function handler(req, res) {
       });
     }
 
-    // Step 2: Create mint
-    console.log("⚡ Step 2: Creating mint...");
-    const mint = await createMint(
-      connection,
-      creatorKeypair,
-      creatorKeypair.publicKey,
-      creatorKeypair.publicKey,
-      0
-    );
-
-    console.log("🔑 Mint created:", mint.toString());
-
-    // Step 3: Create metadata using the EXACT function that exists
-    console.log("📝 Step 3: Creating metadata account with correct function...");
-
+    // Step 2: Create NFT with Metaplex Core (MUCH SIMPLER!)
+    console.log("🎨 Step 2: Creating NFT with Metaplex Core...");
+    
     try {
-      const metaplexLib = await import("@metaplex-foundation/mpl-token-metadata");
+      const asset = generateSigner(umi);
       
-      // Use the EXACT function from our debug output
-      const METADATA_PROGRAM_ID = new PublicKey(metaplexLib.MPL_TOKEN_METADATA_PROGRAM_ID);
-      
-      console.log("✅ Using the EXACT function that exists: createMetadataAccountV3");
-      console.log("🔍 METADATA_PROGRAM_ID:", METADATA_PROGRAM_ID.toString());
-      
-      // Find metadata account PDA
-      const [metadataAccount] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("metadata"),
-          METADATA_PROGRAM_ID.toBuffer(),
-          mint.toBuffer(),
-        ],
-        METADATA_PROGRAM_ID
-      );
+      const result = await create(umi, {
+        asset,
+        name: metadata.name,
+        uri: metadataUri,
+        owner: walletAddress, // Mint directly to customer
+      }).sendAndConfirm(umi);
 
-      console.log("📍 Metadata account PDA:", metadataAccount.toString());
+      console.log("🎉 === NFT CREATED SUCCESSFULLY ===");
+      console.log("🔗 Asset address:", asset.publicKey);
+      console.log("📝 Transaction signature:", result.signature);
+      console.log("🌐 Metadata URI:", metadataUri);
 
-      // Create metadata using the simple approach
-      const result = await metaplexLib.createMetadataAccountV3(
-        connection,
-        creatorKeypair,
-        mint,
-        creatorKeypair.publicKey,
-        creatorKeypair.publicKey,
-        {
-          name: metadata.name,
-          symbol: "WP", 
-          uri: metadataUri,
-          sellerFeeBasisPoints: 0,
-          creators: [
-            {
-              address: creatorKeypair.publicKey,
-              verified: true,
-              share: 100,
-            },
-          ],
-          collection: null,
-          uses: null,
-        },
-        true, // isMutable
-        creatorKeypair.publicKey // updateAuthority
-      );
-      
-      console.log("✅ Metadata account created! Result:", result);
+      return res.status(200).json({
+        success: true,
+        mintAddress: asset.publicKey,
+        transactionSignature: result.signature,
+        metadataUri: metadataUri,
+        explorerUrl: `https://explorer.solana.com/address/${asset.publicKey}`,
+        magicEdenUrl: `https://magiceden.io/item-details/${asset.publicKey}`,
+        message: "REAL NFT with full metadata created successfully using Metaplex Core!",
+        type: "metaplex-core"
+      });
 
-    } catch (metaplexError) {
-      console.error("❌ Metadata creation failed:", metaplexError.message);
-      console.error("❌ Full error:", metaplexError);
+    } catch (coreError) {
+      console.error("❌ Metaplex Core creation failed:", coreError.message);
       return res.status(500).json({
         success: false,
-        error: "Metadata creation failed - NFT incomplete. Contact support for refund with mint: " + mint.toString()
+        error: "NFT creation failed: " + coreError.message
       });
     }
-
-    // Step 4: Mint token to recipient
-    console.log("🚀 Step 4: Minting token to recipient...");
-    const recipientPubkey = new PublicKey(walletAddress);
-    const tokenAccount = await getOrCreateAssociatedTokenAccount(
-      connection,
-      creatorKeypair,
-      mint,
-      recipientPubkey
-    );
-
-    const mintSignature = await mintTo(
-      connection,
-      creatorKeypair,
-      mint,
-      tokenAccount.address,
-      creatorKeypair.publicKey,
-      1
-    );
-
-    const balanceAfter = await connection.getBalance(creatorKeypair.publicKey);
-    const totalCostSOL = (balanceBefore - balanceAfter) / 1e9;
-
-    console.log("🔥 === COMPLETE NFT WITH FULL METADATA CREATED ===");
-    console.log("🔗 Mint address:", mint.toString());
-    console.log("📝 Mint signature:", mintSignature);
-    console.log("🌐 Metadata URI:", metadataUri);
-    console.log("💰 Total cost:", totalCostSOL, "SOL");
-    console.log("💰 Remaining balance:", balanceAfter / 1e9, "SOL");
-
-    return res.status(200).json({
-      success: true,
-      mintAddress: mint.toString(),
-      transactionSignature: mintSignature,
-      metadataUri: metadataUri,
-      explorerUrl: `https://explorer.solana.com/address/${mint.toString()}`,
-      magicEdenUrl: `https://magiceden.io/item-details/${mint.toString()}`,
-      message: "COMPLETE NFT with full metadata created successfully!",
-      costs: {
-        totalSOL: totalCostSOL,
-        totalUSD: totalCostSOL * 165,
-        remainingSOL: balanceAfter / 1e9
-      }
-    });
 
   } catch (error) {
     console.error("❌ COMPLETE FAILURE:", error);
