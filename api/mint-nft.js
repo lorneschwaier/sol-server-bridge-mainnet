@@ -60,10 +60,8 @@ async function uploadImageToPinata(imageUrl) {
 
     console.log("📥 Downloading image from:", imageUrl)
 
-    // Download the image
-    const imageResponse = await axios.get(imageUrl, {
-      responseType: "arraybuffer",
-      timeout: 30000,
+    // Try fetch instead of axios to bypass 403 issues
+    const imageResponse = await fetch(imageUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
         "Accept": "image/*,*/*",
@@ -71,7 +69,11 @@ async function uploadImageToPinata(imageUrl) {
       },
     })
 
-    console.log("✅ Image downloaded, size:", imageResponse.data.length, "bytes")
+    if (!imageResponse.ok) {
+      throw new Error(`Failed to download image: ${imageResponse.status} ${imageResponse.statusText}`)
+    }
+
+    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
 
     // Get file extension from URL or content type
     let fileExtension = "png"
@@ -312,6 +314,7 @@ export default async function handler(req, res) {
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl,
       external_url: "https://x1xo.com",
+      seller_fee_basis_points: 500, // 5% royalty for Magic Eden
       attributes: [
         { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
         { trait_type: "Platform", value: "WordPress" },
@@ -334,10 +337,6 @@ export default async function handler(req, res) {
             share: 100,
           },
         ],
-      },
-      collection: {
-        name: "XENO WordPress Store NFTs",
-        family: "XENO",
       },
     }
 
