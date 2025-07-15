@@ -282,26 +282,32 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 1: Upload image to IPFS if provided
+    // Step 1: Upload image to IPFS if provided - FORCE UPLOAD
     let finalImageUrl = metadata.image
     if (metadata.image && !metadata.image.includes("ipfs")) {
-      console.log("📸 Step 1: Uploading image to IPFS...")
+      console.log("📸 Step 1: FORCING image upload to IPFS...")
       const imageUploadResult = await uploadImageToPinata(metadata.image)
 
       if (imageUploadResult.success) {
         finalImageUrl = imageUploadResult.url
         console.log("✅ Image uploaded successfully:", finalImageUrl)
       } else {
-        console.warn("⚠️ Image upload failed, using original URL:", imageUploadResult.error)
-        // Continue with original URL if upload fails
+        console.error("❌ CRITICAL: Image upload failed:", imageUploadResult.error)
+        // FAIL THE MINT IF IMAGE UPLOAD FAILS
+        return res.status(500).json({
+          success: false,
+          error: "Failed to upload image to IPFS: " + imageUploadResult.error,
+        })
       }
     }
 
-    // Step 2: Create final metadata with proper image URL
+    // Step 2: Create final metadata - MAGIC EDEN COMPATIBLE FORMAT
     const finalMetadata = {
       name: metadata.name || "WordPress NFT",
+      symbol: "XENO",
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl,
+      external_url: "https://x1xo.com",
       attributes: [
         { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
         { trait_type: "Platform", value: "WordPress" },
@@ -317,6 +323,17 @@ export default async function handler(req, res) {
           },
         ],
         category: "image",
+        creators: [
+          {
+            address: creatorKeypair.publicKey.toString(),
+            verified: true,
+            share: 100,
+          },
+        ],
+      },
+      collection: {
+        name: "XENO WordPress Store NFTs",
+        family: "XENO",
       },
     }
 
