@@ -1,3 +1,7 @@
+// Buffer polyfill fix for Vercel ES modules
+import { Buffer } from 'buffer';
+globalThis.Buffer = Buffer;
+
 import { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
 import { createV1, mplCore, ruleSet } from "@metaplex-foundation/mpl-core"
@@ -193,36 +197,8 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     const asset = generateSigner(creatorUmi)
     console.log("🔑 Generated asset address:", asset.publicKey)
 
-    // Prepare collection (if provided)
-    let collectionConfig = none()
-    if (metadata.collection && metadata.collection.trim()) {
-      try {
-        const collectionPubkey = publicKey(metadata.collection.trim())
-        collectionConfig = some({ key: collectionPubkey, verified: false })
-        console.log("📁 Collection configured:", metadata.collection)
-      } catch (error) {
-        console.log("⚠️ Invalid collection address, proceeding without collection")
-      }
-    }
-
     // Prepare plugins (for royalties, attributes, etc.)
     const plugins = []
-
-    // Add royalty plugin if specified
-    if (metadata.royalty && metadata.royalty > 0) {
-      plugins.push({
-        type: "Royalties",
-        basisPoints: metadata.royalty * 100,
-        creators: [
-          {
-            address: creatorKeypair.publicKey.toString(),
-            percentage: 100,
-          },
-        ],
-        ruleSet: ruleSet("None"),
-      })
-      console.log("💎 Royalty configured:", metadata.royalty + "%")
-    }
 
     // Add attributes plugin if provided
     if (metadata.attributes && Array.isArray(metadata.attributes) && metadata.attributes.length > 0) {
@@ -238,12 +214,12 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
 
     console.log("⚡ Creating NFT with Metaplex Core...")
 
-    // Create the NFT using Metaplex Core
+    // Create the NFT using Metaplex Core - FIXED OWNER PARAMETER
     const createInstruction = createV1(creatorUmi, {
       asset,
       name: metadata.name || "Unnamed NFT",
       uri: metadataUrl,
-      collection: collectionConfig,
+      owner: publicKey(walletAddress), // This was causing the buffer.slice error
       plugins: plugins.length > 0 ? plugins : undefined,
     })
 
