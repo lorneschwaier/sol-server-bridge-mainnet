@@ -65,7 +65,9 @@ async function uploadImageToPinata(imageUrl) {
       responseType: "arraybuffer",
       timeout: 30000,
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept": "image/*,*/*",
+        "Referer": "https://x1xo.com/",
       },
     })
 
@@ -282,23 +284,25 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 1: Upload image to IPFS if provided - FORCE UPLOAD
+    // Step 1: Upload image to IPFS - CONFIGURABLE OPTION
     let finalImageUrl = metadata.image
-    if (metadata.image && !metadata.image.includes("ipfs")) {
-      console.log("📸 Step 1: FORCING image upload to IPFS...")
+    const useIPFS = metadata.use_ipfs || false // Add this option from WordPress
+    
+    if (metadata.image && !metadata.image.includes("ipfs") && useIPFS) {
+      console.log("📸 Step 1: Uploading image to IPFS (user chose decentralized storage)...")
       const imageUploadResult = await uploadImageToPinata(metadata.image)
 
       if (imageUploadResult.success) {
         finalImageUrl = imageUploadResult.url
-        console.log("✅ Image uploaded successfully:", finalImageUrl)
+        console.log("✅ Image uploaded to IPFS successfully:", finalImageUrl)
       } else {
-        console.error("❌ CRITICAL: Image upload failed:", imageUploadResult.error)
-        // FAIL THE MINT IF IMAGE UPLOAD FAILS
-        return res.status(500).json({
-          success: false,
-          error: "Failed to upload image to IPFS: " + imageUploadResult.error,
-        })
+        console.error("❌ IPFS upload failed, falling back to website image:", imageUploadResult.error)
+        finalImageUrl = metadata.image // Keep original website image as fallback
       }
+    } else if (!useIPFS) {
+      console.log("📸 Using website image (fast option chosen):", finalImageUrl)
+    } else {
+      console.log("📸 Image already on IPFS or no image provided")
     }
 
     // Step 2: Create final metadata - MAGIC EDEN COMPATIBLE FORMAT
