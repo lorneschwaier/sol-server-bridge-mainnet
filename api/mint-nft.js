@@ -197,30 +197,15 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     const asset = generateSigner(creatorUmi)
     console.log("🔑 Generated asset address:", asset.publicKey)
 
-    // Prepare plugins (for royalties, attributes, etc.)
-    const plugins = []
-
-    // Add attributes plugin if provided
-    if (metadata.attributes && Array.isArray(metadata.attributes) && metadata.attributes.length > 0) {
-      plugins.push({
-        type: "Attributes",
-        attributeList: metadata.attributes.map((attr) => ({
-          key: attr.trait_type || attr.key || "trait",
-          value: attr.value || "unknown",
-        })),
-      })
-      console.log("🏷️ Attributes configured:", metadata.attributes.length, "traits")
-    }
-
     console.log("⚡ Creating NFT with Metaplex Core...")
 
-    // Create the NFT using Metaplex Core - FIXED OWNER PARAMETER
+    // Create the NFT using Metaplex Core - SIMPLE VERSION WITHOUT PLUGINS
     const createInstruction = createV1(creatorUmi, {
       asset,
       name: metadata.name || "Unnamed NFT",
       uri: metadataUrl,
-      owner: publicKey(walletAddress), // This was causing the buffer.slice error
-      plugins: plugins.length > 0 ? plugins : undefined,
+      owner: publicKey(walletAddress),
+      // No plugins - keep it simple for now, attributes are in metadata
     })
 
     // Execute the transaction
