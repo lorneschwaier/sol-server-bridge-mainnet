@@ -88,9 +88,9 @@ async function uploadImageToPinata(imageUrl) {
     // Create form data for Pinata
     const form = new FormData()
 
-    form.append("file", Buffer.from(imageResponse.data), {
+    form.append("file", imageBuffer, {
       filename: `nft-image-${Date.now()}.${fileExtension}`,
-      contentType: imageResponse.headers["content-type"] || `image/${fileExtension}`,
+      contentType: `image/${fileExtension}`,
     })
 
     form.append(
