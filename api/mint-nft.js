@@ -21,6 +21,7 @@ const SOLANA_RPC_URL =
 
 const PINATA_API_KEY = process.env.PINATA_API_KEY
 const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
+const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY // Declare the creatorPrivateKey variable
 
 // Initialize Solana connection
 const connection = new Connection(SOLANA_RPC_URL, "confirmed")
@@ -172,16 +173,47 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl, cre
     }
 
     console.log("💰 === BALANCE CHECK ===")
+    console.log("🔑 Creator private key (first 10 chars):", CREATOR_PRIVATE_KEY.substring(0, 10) + "...")
     console.log("🔑 Creator wallet address:", creatorKeypair.publicKey.toString())
     console.log("🌐 RPC URL:", SOLANA_RPC_URL)
 
-    const balance = await connection.getBalance(creatorKeypair.publicKey)
-    console.log("💰 Balance:", balance / LAMPORTS_PER_SOL, "SOL")
+    console.log("💰 Attempting balance check...")
 
-    if (balance < 0.01 * LAMPORTS_PER_SOL) {
-      throw new Error(
-        `Insufficient SOL in creator wallet. Balance: ${(balance / LAMPORTS_PER_SOL).toFixed(6)} SOL. Minimum required: 0.01 SOL. Please fund the wallet.`,
-      )
+    try {
+      const balance = await connection.getBalance(creatorKeypair.publicKey)
+      const balanceSOL = balance / LAMPORTS_PER_SOL
+      console.log("💰 Raw balance (lamports):", balance)
+      console.log("💰 Balance (SOL):", balanceSOL.toFixed(6))
+
+      if (balance === 0) {
+        console.log("⚠️ Balance is 0, trying alternative RPC endpoint...")
+        const altConnection = new Connection("https://solana-api.projectserum.com", "confirmed")
+        const altBalance = await altConnection.getBalance(creatorKeypair.publicKey)
+        console.log("💰 Alternative RPC balance:", altBalance / LAMPORTS_PER_SOL, "SOL")
+
+        if (altBalance > 0) {
+          console.log("✅ Alternative RPC shows balance, using that value")
+          const finalBalance = altBalance
+          if (finalBalance < 0.01 * LAMPORTS_PER_SOL) {
+            throw new Error(
+              `Insufficient SOL in creator wallet. Balance: ${(finalBalance / LAMPORTS_PER_SOL).toFixed(6)} SOL. Minimum required: 0.01 SOL. Please fund wallet: ${creatorKeypair.publicKey.toString()}`,
+            )
+          }
+        } else {
+          throw new Error(
+            `Creator wallet has no SOL. Balance: 0.000000 SOL. Minimum required: 0.01 SOL. Please fund wallet: ${creatorKeypair.publicKey.toString()}`,
+          )
+        }
+      } else {
+        if (balance < 0.01 * LAMPORTS_PER_SOL) {
+          throw new Error(
+            `Insufficient SOL in creator wallet. Balance: ${balanceSOL.toFixed(6)} SOL. Minimum required: 0.01 SOL. Please fund wallet: ${creatorKeypair.publicKey.toString()}`,
+          )
+        }
+      }
+    } catch (balanceError) {
+      console.error("❌ Balance check failed:", balanceError.message)
+      throw balanceError
     }
 
     // Generate asset signer
@@ -255,15 +287,14 @@ export default async function handler(req, res) {
 
   try {
     const { walletAddress, metadata } = req.body
-    const creatorPrivateKey = process.env.CREATOR_PRIVATE_KEY
 
     console.log("🎨 === REAL NFT MINTING REQUEST (METAPLEX CORE) ===")
     console.log("👤 Wallet:", walletAddress)
     console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
-    console.log("🔑 Creator private key from Vercel env:", creatorPrivateKey ? "Yes" : "No")
+    console.log("🔑 Creator private key from Vercel env:", CREATOR_PRIVATE_KEY ? "Yes" : "No")
     console.log("🏗️ Image hosting method: Pinata IPFS (permanent storage for NFTs)")
 
-    if (!walletAddress || !metadata || !creatorPrivateKey) {
+    if (!walletAddress || !metadata || !CREATOR_PRIVATE_KEY) {
       return res.status(400).json({
         success: false,
         error: "Missing required fields: walletAddress, metadata, or CREATOR_PRIVATE_KEY environment variable",
@@ -277,10 +308,10 @@ export default async function handler(req, res) {
       console.log("🔑 Loading creator wallet from Vercel environment variable...")
 
       let privateKeyArray
-      if (creatorPrivateKey.startsWith("[")) {
-        privateKeyArray = JSON.parse(creatorPrivateKey)
+      if (CREATOR_PRIVATE_KEY.startsWith("[")) {
+        privateKeyArray = JSON.parse(CREATOR_PRIVATE_KEY)
       } else {
-        privateKeyArray = Array.from(bs58.decode(creatorPrivateKey))
+        privateKeyArray = Array.from(bs58.decode(CREATOR_PRIVATE_KEY))
       }
 
       creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
