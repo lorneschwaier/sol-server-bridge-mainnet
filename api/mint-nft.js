@@ -15,13 +15,19 @@ import FormData from "form-data"
 const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
 const SOLANA_RPC_URL =
   process.env.SOLANA_RPC_URL ||
-  (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
+  (SOLANA_NETWORK === "mainnet-beta"
+    ? "https://solana-mainnet.g.alchemy.com/v2/demo" // More reliable RPC
+    : clusterApiUrl(SOLANA_NETWORK))
+
 const PINATA_API_KEY = process.env.PINATA_API_KEY
 const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
 const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
 
-// Initialize Solana connection
-const connection = new Connection(SOLANA_RPC_URL, "confirmed")
+// Initialize Solana connection with better configuration
+const connection = new Connection(SOLANA_RPC_URL, {
+  commitment: "confirmed",
+  confirmTransactionInitialTimeout: 60000,
+})
 
 // Initialize creator keypair and UMI
 let creatorKeypair = null
@@ -189,20 +195,48 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     console.log("🏷️ NFT Name:", metadata.name)
 
     // Check creator wallet balance
-    const balance = await connection.getBalance(creatorKeypair.publicKey)
-    console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
-
+    console.log("💰 Checking creator wallet balance...")
     console.log("🔍 Debug - Creator wallet address:", creatorKeypair.publicKey.toString())
+
+    let balance = 0
+    let balanceCheckAttempts = 0
+    const maxBalanceAttempts = 3
+
+    while (balanceCheckAttempts < maxBalanceAttempts) {
+      try {
+        balanceCheckAttempts++
+        console.log(`🔄 Balance check attempt ${balanceCheckAttempts}/${maxBalanceAttempts}`)
+
+        balance = await connection.getBalance(creatorKeypair.publicKey)
+        console.log("✅ Balance retrieved successfully:", balance, "lamports")
+        break
+      } catch (balanceError) {
+        console.error(`❌ Balance check attempt ${balanceCheckAttempts} failed:`, balanceError.message)
+
+        if (balanceCheckAttempts === maxBalanceAttempts) {
+          throw new Error(
+            `Failed to check wallet balance after ${maxBalanceAttempts} attempts: ${balanceError.message}`,
+          )
+        }
+
+        // Wait 1 second before retry
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
+    }
+
     console.log("🔍 Debug - Raw balance in lamports:", balance)
     console.log("🔍 Debug - Balance in SOL:", balance / LAMPORTS_PER_SOL)
-    console.log("🔍 Debug - Required minimum:", 0.01 * LAMPORTS_PER_SOL, "lamports")
-    console.log("🔍 Debug - Balance check result:", balance < 0.01 * LAMPORTS_PER_SOL)
+    console.log("🔍 Debug - Required minimum:", 0.005 * LAMPORTS_PER_SOL, "lamports")
+    console.log("🔍 Debug - Balance check result:", balance < 0.005 * LAMPORTS_PER_SOL)
 
-    if (balance < 0.01 * LAMPORTS_PER_SOL) {
+    const minimumBalance = 0.005 * LAMPORTS_PER_SOL
+    if (balance < minimumBalance) {
       throw new Error(
-        `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet.`,
+        `Insufficient SOL in creator wallet. Balance: ${(balance / LAMPORTS_PER_SOL).toFixed(6)} SOL. Minimum required: ${(minimumBalance / LAMPORTS_PER_SOL).toFixed(3)} SOL. Please fund the wallet.`,
       )
     }
+
+    console.log("✅ Creator wallet has sufficient balance:", (balance / LAMPORTS_PER_SOL).toFixed(6), "SOL")
 
     // Generate asset signer
     const asset = generateSigner(creatorUmi)
