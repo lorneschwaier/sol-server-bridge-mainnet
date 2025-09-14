@@ -51,6 +51,12 @@ if (CREATOR_PRIVATE_KEY) {
 
     creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
     console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
+    console.log("🔍 WALLET VERIFICATION - Expected: A4u2RQYYHYztysgTJcdVD2ubzqJXeuTHb8bScjHqf1Vk")
+    console.log("🔍 WALLET VERIFICATION - Derived:  ", creatorKeypair.publicKey.toString())
+    console.log(
+      "🔍 WALLET VERIFICATION - Match:",
+      creatorKeypair.publicKey.toString() === "A4u2RQYYHYztysgTJcdVD2ubzqJXeuTHb8bScjHqf1Vk",
+    )
 
     const umi = createUmi(SOLANA_RPC_URL).use(mplCore())
     const umiKeypair = fromWeb3JsKeypair(creatorKeypair)
