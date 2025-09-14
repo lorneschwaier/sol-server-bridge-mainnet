@@ -1,11 +1,11 @@
 // Buffer polyfill fix for Vercel ES modules
-import { Buffer } from 'buffer';
-globalThis.Buffer = Buffer;
+import { Buffer } from "buffer"
+globalThis.Buffer = Buffer
 
 import { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
-import { createV1, mplCore, ruleSet } from "@metaplex-foundation/mpl-core"
-import { keypairIdentity, generateSigner, publicKey, some, none } from "@metaplex-foundation/umi"
+import { createV1, mplCore } from "@metaplex-foundation/mpl-core"
+import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
 import axios from "axios"
 import bs58 from "bs58"
@@ -63,9 +63,10 @@ async function uploadImageToPinata(imageUrl) {
     // Try fetch instead of axios to bypass 403 issues
     const imageResponse = await fetch(imageUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Accept": "image/*,*/*",
-        "Referer": "https://x1xo.com/",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        Accept: "image/*,*/*",
+        Referer: "https://x1xo.com/",
       },
     })
 
@@ -203,13 +204,26 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
 
     console.log("⚡ Creating NFT with Metaplex Core...")
 
-    // Create the NFT using Metaplex Core - SIMPLE VERSION WITHOUT PLUGINS
+    // Create the NFT using Metaplex Core with proper symbol and creator
     const createInstruction = createV1(creatorUmi, {
       asset,
       name: metadata.name || "Unnamed NFT",
       uri: metadataUrl,
       owner: publicKey(walletAddress),
-      // No plugins - keep it simple for now, attributes are in metadata
+      symbol: metadata.symbol || "XENO",
+      plugins: [
+        {
+          type: "Royalties",
+          basisPoints: 500, // 5% royalty
+          creators: [
+            {
+              address: publicKey(creatorKeypair.publicKey.toString()),
+              percentage: 100,
+            },
+          ],
+          ruleSet: "None",
+        },
+      ],
     })
 
     // Execute the transaction
@@ -247,6 +261,11 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
 }
 
 export default async function handler(req, res) {
+  if (!res || typeof res.setHeader !== "function") {
+    console.log("[v0] Skipping execution in preview environment - this file is meant for Vercel deployment")
+    return
+  }
+
   // Set CORS headers - FIXED FOR YOUR WEBSITE
   res.setHeader("Access-Control-Allow-Origin", "https://x1xo.com")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -289,28 +308,40 @@ export default async function handler(req, res) {
     // Step 1: Upload image to IPFS - CONFIGURABLE OPTION
     let finalImageUrl = metadata.image
     const useIPFS = metadata.use_ipfs || false // Add this option from WordPress
-    
-    if (metadata.image && !metadata.image.includes("ipfs") && useIPFS) {
+
+    console.log("[v0] Debug - useIPFS flag:", useIPFS)
+    console.log("[v0] Debug - metadata.image:", metadata.image)
+    console.log("[v0] Debug - image exists:", !!metadata.image)
+
+    if (metadata.image && useIPFS) {
       console.log("📸 Step 1: Uploading image to IPFS (user chose decentralized storage)...")
+      console.log("🔍 Original image URL:", metadata.image)
+      console.log("🔍 useIPFS flag:", useIPFS)
+      console.log("[v0] Debug - About to call uploadImageToPinata with URL:", metadata.image)
+
       const imageUploadResult = await uploadImageToPinata(metadata.image)
+
+      console.log("[v0] Debug - Image upload result:", JSON.stringify(imageUploadResult, null, 2))
 
       if (imageUploadResult.success) {
         finalImageUrl = imageUploadResult.url
         console.log("✅ Image uploaded to IPFS successfully:", finalImageUrl)
       } else {
-        console.error("❌ IPFS upload failed, falling back to website image:", imageUploadResult.error)
+        console.error("❌ IPFS image upload failed, falling back to website image:", imageUploadResult.error)
         finalImageUrl = metadata.image // Keep original website image as fallback
       }
     } else if (!useIPFS) {
       console.log("📸 Using website image (fast option chosen):", finalImageUrl)
     } else {
-      console.log("📸 Image already on IPFS or no image provided")
+      console.log("📸 No image provided or useIPFS is false")
+      console.log("[v0] Debug - metadata.image exists:", !!metadata.image)
+      console.log("[v0] Debug - useIPFS value:", useIPFS)
     }
 
     // Step 2: Create final metadata - MAGIC EDEN COMPATIBLE FORMAT
     const finalMetadata = {
       name: metadata.name || "WordPress NFT",
-      symbol: "XENO",
+      symbol: "XENO", // This symbol should now appear on Solana Explorer
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl,
       external_url: "https://x1xo.com",
@@ -318,7 +349,7 @@ export default async function handler(req, res) {
       attributes: [
         { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
         { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Creator", value: "WordPress Store" },
+        { trait_type: "Creator", value: "x1xo.com" }, // Updated creator name
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
         ...(metadata.attributes || []),
       ],
