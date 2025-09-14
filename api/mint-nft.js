@@ -70,21 +70,60 @@ async function uploadImageToPinata(imageUrl) {
 
     console.log("📥 Downloading image from:", imageUrl)
 
-    // Try fetch instead of axios to bypass 403 issues
-    const imageResponse = await fetch(imageUrl, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        Accept: "image/*,*/*",
-        Referer: "https://x1xo.com/",
+    let imageBuffer = null
+    const downloadAttempts = [
+      // Attempt 1: Direct fetch with browser headers
+      async () => {
+        const response = await fetch(imageUrl, {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            Accept: "image/*,*/*",
+            Referer: "https://x1xo.com/",
+            "Cache-Control": "no-cache",
+          },
+          timeout: 30000,
+        })
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        return Buffer.from(await response.arrayBuffer())
       },
-    })
+      // Attempt 2: Axios with different headers
+      async () => {
+        const response = await axios.get(imageUrl, {
+          responseType: "arraybuffer",
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; NFTBot/1.0)",
+            Accept: "image/*",
+          },
+          timeout: 30000,
+        })
+        return Buffer.from(response.data)
+      },
+      // Attempt 3: Simple fetch without special headers
+      async () => {
+        const response = await fetch(imageUrl, { timeout: 30000 })
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        return Buffer.from(await response.arrayBuffer())
+      },
+    ]
 
-    if (!imageResponse.ok) {
-      throw new Error(`Failed to download image: ${imageResponse.status} ${imageResponse.statusText}`)
+    for (let i = 0; i < downloadAttempts.length; i++) {
+      try {
+        console.log(`📥 Download attempt ${i + 1}/${downloadAttempts.length}`)
+        imageBuffer = await downloadAttempts[i]()
+        console.log(`✅ Image downloaded successfully (${imageBuffer.length} bytes)`)
+        break
+      } catch (error) {
+        console.log(`❌ Download attempt ${i + 1} failed:`, error.message)
+        if (i === downloadAttempts.length - 1) {
+          throw new Error(`All download attempts failed. Last error: ${error.message}`)
+        }
+      }
     }
 
-    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
+    if (!imageBuffer) {
+      throw new Error("Failed to download image after all attempts")
+    }
 
     // Get file extension from URL or content type
     let fileExtension = "png"
@@ -113,14 +152,31 @@ async function uploadImageToPinata(imageUrl) {
 
     console.log("📤 Uploading image to Pinata IPFS...")
 
-    const pinataResponse = await axios.post("https://api.pinata.cloud/pinning/pinFileToIPFS", form, {
-      headers: {
-        ...form.getHeaders(),
-        pinata_api_key: PINATA_API_KEY,
-        pinata_secret_api_key: PINATA_SECRET_KEY,
-      },
-      timeout: 60000,
-    })
+    let pinataResponse = null
+    const maxRetries = 3
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`📤 Pinata upload attempt ${attempt}/${maxRetries}`)
+        pinataResponse = await axios.post("https://api.pinata.cloud/pinning/pinFileToIPFS", form, {
+          headers: {
+            ...form.getHeaders(),
+            pinata_api_key: PINATA_API_KEY,
+            pinata_secret_api_key: PINATA_SECRET_KEY,
+          },
+          timeout: 60000,
+        })
+        console.log(`✅ Pinata upload successful on attempt ${attempt}`)
+        break
+      } catch (error) {
+        console.log(`❌ Pinata upload attempt ${attempt} failed:`, error.message)
+        if (attempt === maxRetries) {
+          throw error
+        }
+        // Wait before retry
+        await new Promise((resolve) => setTimeout(resolve, 2000 * attempt))
+      }
+    }
 
     const imageIpfsUrl = `https://gateway.pinata.cloud/ipfs/${pinataResponse.data.IpfsHash}`
     console.log("✅ Image uploaded to IPFS:", imageIpfsUrl)
