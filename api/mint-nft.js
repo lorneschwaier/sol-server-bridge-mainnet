@@ -294,18 +294,18 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl, cre
       owner: publicKey(walletAddress),
       plugins: [
         {
-          type: "Royalties",
-          basisPoints: metadata.seller_fee_basis_points || 500, // 5% default royalty
+          __kind: "Royalties",
+          basisPoints: metadata.seller_fee_basis_points || 500,
           creators: [
             {
-              address: creatorKeypair.publicKey,
+              address: publicKey(creatorKeypair.publicKey.toString()),
               percentage: 100,
             },
           ],
-          ruleSet: "None",
+          ruleSet: { __kind: "None" },
         },
         {
-          type: "Attributes",
+          __kind: "Attributes",
           attributeList: [
             { key: "symbol", value: metadata.symbol || "XENO" },
             { key: "creator", value: "x1xo.com" },
