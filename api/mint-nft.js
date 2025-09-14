@@ -284,13 +284,33 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
     const asset = generateSigner(creatorUmi)
     console.log("🔑 Generated asset address:", asset.publicKey)
 
-    console.log("⚡ Creating NFT with Core (no plugins)...")
+    console.log("⚡ Creating NFT with Core (with creator verification)...")
 
     const createInstruction = create(creatorUmi, {
       asset,
       name: metadata.name || "Unnamed NFT",
       uri: metadataUrl,
       owner: publicKey(walletAddress),
+      plugins: [
+        {
+          type: "Royalties",
+          basisPoints: 300, // 3% royalty
+          creators: [
+            {
+              address: creatorUmi.identity.publicKey,
+              percentage: 100,
+            },
+          ],
+          ruleSet: "None",
+        },
+        {
+          type: "Attributes",
+          attributeList: [
+            { key: "symbol", value: metadata.symbol || "XENO" },
+            { key: "collection", value: "Xeno AI NFT Collection" },
+          ],
+        },
+      ],
     })
 
     // Execute the transaction
@@ -422,17 +442,45 @@ export default async function handler(req, res) {
     // Step 2: Create final metadata - MAGIC EDEN COMPATIBLE FORMAT
     const finalMetadata = {
       name: metadata.name || "WordPress NFT",
-      symbol: metadata.symbol || "XENO",
+      symbol: metadata.symbol || "XENO", // Keep symbol for compatibility
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl,
       external_url: "https://x1xo.com",
+      seller_fee_basis_points: 300, // 3% royalty
+      properties: {
+        files: [
+          {
+            uri: finalImageUrl,
+            type: finalImageUrl.includes(".png")
+              ? "image/png"
+              : finalImageUrl.includes(".jpg") || finalImageUrl.includes(".jpeg")
+                ? "image/jpeg"
+                : finalImageUrl.includes(".webp")
+                  ? "image/webp"
+                  : "image/png",
+          },
+        ],
+        category: "image",
+        creators: [
+          {
+            address: creatorKeypair.publicKey.toString(),
+            verified: true,
+            share: 100,
+          },
+        ],
+      },
       attributes: [
         { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo.com" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
+        { trait_type: "Symbol", value: metadata.symbol || "XENO" }, // Add symbol as attribute
         ...(metadata.attributes || []),
       ],
+      collection: {
+        name: "Xeno AI NFT Collection",
+        family: "Xeno AI",
+      },
     }
 
     console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
