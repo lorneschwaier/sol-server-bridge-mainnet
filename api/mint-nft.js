@@ -219,26 +219,14 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     console.log("📋 Metadata URL:", metadataUrl)
     console.log("🏷️ NFT Name:", metadata.name)
 
-    console.log("💰 === BALANCE CHECK DEBUG ===")
-    console.log("🔗 RPC URL:", SOLANA_RPC_URL)
-    console.log("🔑 Creator wallet:", creatorKeypair.publicKey.toString())
+    // Simple balance check like the working version
+    const balance = await connection.getBalance(creatorKeypair.publicKey)
+    console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
 
-    try {
-      console.log("📡 Calling getBalance...")
-      const balance = await connection.getBalance(creatorKeypair.publicKey)
-      console.log("✅ Raw balance (lamports):", balance)
-      console.log("💰 Balance in SOL:", balance / LAMPORTS_PER_SOL)
-      console.log("🎯 Required minimum:", 0.01, "SOL")
-      console.log("✅ Balance check passed:", balance >= 0.01 * LAMPORTS_PER_SOL)
-
-      if (balance < 0.01 * LAMPORTS_PER_SOL) {
-        throw new Error(
-          `Insufficient SOL in creator wallet. Balance: ${(balance / LAMPORTS_PER_SOL).toFixed(6)} SOL. Please fund the wallet.`,
-        )
-      }
-    } catch (balanceError) {
-      console.error("❌ Balance check failed:", balanceError.message)
-      throw new Error(`Balance check failed: ${balanceError.message}`)
+    if (balance < 0.01 * LAMPORTS_PER_SOL) {
+      throw new Error(
+        `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Minimum required: 0.01 SOL. Please fund the wallet.`,
+      )
     }
 
     // Generate asset signer
