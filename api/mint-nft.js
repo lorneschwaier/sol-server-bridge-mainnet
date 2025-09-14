@@ -253,6 +253,7 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl, cre
     console.log("👤 Recipient:", walletAddress)
     console.log("📋 Metadata URL:", metadataUrl)
     console.log("🏷️ NFT Name:", metadata.name)
+    console.log("🏷️ NFT Symbol:", metadata.symbol)
 
     console.log("🔗 Finding working RPC connection...")
     const workingConnection = await getWorkingRPCConnection()
@@ -286,12 +287,35 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl, cre
 
     console.log("⚡ Creating NFT with Metaplex Core...")
 
-    // Simple NFT creation - like the working version
     const createInstruction = createV1(creatorUmi, {
       asset,
       name: metadata.name || "Unnamed NFT",
       uri: metadataUrl,
       owner: publicKey(walletAddress),
+      plugins: [
+        {
+          type: "Royalties",
+          basisPoints: metadata.seller_fee_basis_points || 500, // 5% default royalty
+          creators: [
+            {
+              address: creatorKeypair.publicKey,
+              percentage: 100,
+            },
+          ],
+          ruleSet: "None",
+        },
+        {
+          type: "Attributes",
+          attributeList: [
+            { key: "symbol", value: metadata.symbol || "XENO" },
+            { key: "creator", value: "x1xo.com" },
+            ...(metadata.attributes || []).map((attr) => ({
+              key: attr.trait_type,
+              value: String(attr.value),
+            })),
+          ],
+        },
+      ],
     })
 
     // Execute the transaction
@@ -423,11 +447,11 @@ export default async function handler(req, res) {
     // Step 2: Create final metadata - MAGIC EDEN COMPATIBLE FORMAT
     const finalMetadata = {
       name: metadata.name || "WordPress NFT",
-      symbol: "XENO", // This symbol should now appear on Solana Explorer
+      symbol: metadata.symbol || "XENO", // This symbol should now appear on Solana Explorer
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl,
       external_url: "https://x1xo.com",
-      seller_fee_basis_points: 500, // 5% royalty for Magic Eden
+      seller_fee_basis_points: metadata.seller_fee_basis_points || 500, // 5% royalty for Magic Eden
       attributes: [
         { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
         { trait_type: "Platform", value: "WordPress" },
