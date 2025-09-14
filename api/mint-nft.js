@@ -192,6 +192,12 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     const balance = await connection.getBalance(creatorKeypair.publicKey)
     console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
 
+    console.log("🔍 Debug - Creator wallet address:", creatorKeypair.publicKey.toString())
+    console.log("🔍 Debug - Raw balance in lamports:", balance)
+    console.log("🔍 Debug - Balance in SOL:", balance / LAMPORTS_PER_SOL)
+    console.log("🔍 Debug - Required minimum:", 0.01 * LAMPORTS_PER_SOL, "lamports")
+    console.log("🔍 Debug - Balance check result:", balance < 0.01 * LAMPORTS_PER_SOL)
+
     if (balance < 0.01 * LAMPORTS_PER_SOL) {
       throw new Error(
         `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet.`,
