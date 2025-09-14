@@ -21,44 +21,9 @@ const SOLANA_RPC_URL =
 
 const PINATA_API_KEY = process.env.PINATA_API_KEY
 const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
-const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
 
 // Initialize Solana connection
 const connection = new Connection(SOLANA_RPC_URL, "confirmed")
-
-// Initialize creator keypair and UMI
-let creatorKeypair = null
-let creatorUmi = null
-
-if (CREATOR_PRIVATE_KEY) {
-  try {
-    console.log("🔑 Loading creator wallet...")
-
-    let privateKeyArray
-    if (CREATOR_PRIVATE_KEY.startsWith("[")) {
-      privateKeyArray = JSON.parse(CREATOR_PRIVATE_KEY)
-    } else {
-      privateKeyArray = Array.from(bs58.decode(CREATOR_PRIVATE_KEY))
-    }
-
-    creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
-    console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
-    console.log("🔍 WALLET VERIFICATION - Expected: A4u2RQYYHYztysgTJcdVD2ubzqJXeuTHb8bScjHqf1Vk")
-    console.log("🔍 WALLET VERIFICATION - Derived:  ", creatorKeypair.publicKey.toString())
-    console.log(
-      "🔍 WALLET VERIFICATION - Match:",
-      creatorKeypair.publicKey.toString() === "A4u2RQYYHYztysgTJcdVD2ubzqJXeuTHb8bScjHqf1Vk",
-    )
-
-    const umi = createUmi(SOLANA_RPC_URL).use(mplCore())
-    const umiKeypair = fromWeb3JsKeypair(creatorKeypair)
-    creatorUmi = umi.use(keypairIdentity(umiKeypair))
-
-    console.log("⚡ Metaplex Core UMI initialized successfully")
-  } catch (error) {
-    console.error("❌ Error loading creator keypair:", error.message)
-  }
-}
 
 // Upload image to Pinata IPFS
 async function uploadImageToPinata(imageUrl) {
@@ -186,7 +151,7 @@ async function uploadToPinata(metadata) {
 }
 
 // Real NFT Minting with Metaplex Core
-async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
+async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl, creatorKeypair, creatorUmi) {
   try {
     if (!creatorUmi) {
       throw new Error("Metaplex Core UMI not initialized - creator private key required")
@@ -206,11 +171,12 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
       throw new Error("RPC connection failed: " + rpcError.message)
     }
 
-    // Simple balance check like the working version
+    console.log("💰 === BALANCE CHECK ===")
+    console.log("🔑 Creator wallet address:", creatorKeypair.publicKey.toString())
+    console.log("🌐 RPC URL:", SOLANA_RPC_URL)
+
     const balance = await connection.getBalance(creatorKeypair.publicKey)
-    console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
-    console.log("💰 Balance in lamports:", balance)
-    console.log("💰 Required minimum:", 0.01 * LAMPORTS_PER_SOL, "lamports")
+    console.log("💰 Balance:", balance / LAMPORTS_PER_SOL, "SOL")
 
     if (balance < 0.01 * LAMPORTS_PER_SOL) {
       throw new Error(
@@ -289,16 +255,47 @@ export default async function handler(req, res) {
 
   try {
     const { walletAddress, metadata } = req.body
+    const creatorPrivateKey = process.env.CREATOR_PRIVATE_KEY
 
     console.log("🎨 === REAL NFT MINTING REQUEST (METAPLEX CORE) ===")
     console.log("👤 Wallet:", walletAddress)
     console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
+    console.log("🔑 Creator private key from Vercel env:", creatorPrivateKey ? "Yes" : "No")
     console.log("🏗️ Image hosting method: Pinata IPFS (permanent storage for NFTs)")
 
-    if (!walletAddress || !metadata) {
+    if (!walletAddress || !metadata || !creatorPrivateKey) {
       return res.status(400).json({
         success: false,
-        error: "Missing required fields: walletAddress and metadata",
+        error: "Missing required fields: walletAddress, metadata, or CREATOR_PRIVATE_KEY environment variable",
+      })
+    }
+
+    let creatorKeypair = null
+    let creatorUmi = null
+
+    try {
+      console.log("🔑 Loading creator wallet from Vercel environment variable...")
+
+      let privateKeyArray
+      if (creatorPrivateKey.startsWith("[")) {
+        privateKeyArray = JSON.parse(creatorPrivateKey)
+      } else {
+        privateKeyArray = Array.from(bs58.decode(creatorPrivateKey))
+      }
+
+      creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
+      console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
+
+      const umi = createUmi(SOLANA_RPC_URL).use(mplCore())
+      const umiKeypair = fromWeb3JsKeypair(creatorKeypair)
+      creatorUmi = umi.use(keypairIdentity(umiKeypair))
+
+      console.log("⚡ Metaplex Core UMI initialized successfully")
+    } catch (error) {
+      console.error("❌ Error loading creator keypair:", error.message)
+      return res.status(500).json({
+        success: false,
+        error: "Failed to load creator keypair: " + error.message,
       })
     }
 
@@ -376,7 +373,13 @@ export default async function handler(req, res) {
 
     // Step 4: Mint NFT with Metaplex Core
     console.log("⚡ Step 3: Minting NFT with Metaplex Core...")
-    const mintResult = await mintNFTWithMetaplexCore(walletAddress, finalMetadata, uploadResult.url)
+    const mintResult = await mintNFTWithMetaplexCore(
+      walletAddress,
+      finalMetadata,
+      uploadResult.url,
+      creatorKeypair,
+      creatorUmi,
+    )
 
     if (!mintResult.success) {
       return res.status(500).json({
