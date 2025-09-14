@@ -16,7 +16,7 @@ const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
 const SOLANA_RPC_URL =
   process.env.SOLANA_RPC_URL ||
   (SOLANA_NETWORK === "mainnet-beta"
-    ? "https://solana-mainnet.g.alchemy.com/v2/demo" // More reliable RPC
+    ? "https://api.mainnet-beta.solana.com" // Official Solana RPC
     : clusterApiUrl(SOLANA_NETWORK))
 
 const PINATA_API_KEY = process.env.PINATA_API_KEY
@@ -27,6 +27,11 @@ const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
 const connection = new Connection(SOLANA_RPC_URL, {
   commitment: "confirmed",
   confirmTransactionInitialTimeout: 60000,
+})
+
+// Backup connection for balance checks
+const backupConnection = new Connection("https://solana-mainnet.g.alchemy.com/v2/demo", {
+  commitment: "confirmed",
 })
 
 // Initialize creator keypair and UMI
@@ -207,8 +212,15 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
         balanceCheckAttempts++
         console.log(`🔄 Balance check attempt ${balanceCheckAttempts}/${maxBalanceAttempts}`)
 
-        balance = await connection.getBalance(creatorKeypair.publicKey)
+        // Try primary connection first, then backup
+        const connectionToUse = balanceCheckAttempts <= 2 ? connection : backupConnection
+        const rpcUrl = balanceCheckAttempts <= 2 ? SOLANA_RPC_URL : "https://solana-mainnet.g.alchemy.com/v2/demo"
+
+        console.log(`🌐 Using RPC endpoint: ${rpcUrl}`)
+
+        balance = await connectionToUse.getBalance(creatorKeypair.publicKey)
         console.log("✅ Balance retrieved successfully:", balance, "lamports")
+        console.log("✅ Balance in SOL:", (balance / LAMPORTS_PER_SOL).toFixed(6))
         break
       } catch (balanceError) {
         console.error(`❌ Balance check attempt ${balanceCheckAttempts} failed:`, balanceError.message)
@@ -219,17 +231,17 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
           )
         }
 
-        // Wait 1 second before retry
-        await new Promise((resolve) => setTimeout(resolve, 1000))
+        // Wait 2 seconds before retry
+        await new Promise((resolve) => setTimeout(resolve, 2000))
       }
     }
 
     console.log("🔍 Debug - Raw balance in lamports:", balance)
     console.log("🔍 Debug - Balance in SOL:", balance / LAMPORTS_PER_SOL)
-    console.log("🔍 Debug - Required minimum:", 0.005 * LAMPORTS_PER_SOL, "lamports")
-    console.log("🔍 Debug - Balance check result:", balance < 0.005 * LAMPORTS_PER_SOL)
+    console.log("🔍 Debug - Required minimum:", 0.008 * LAMPORTS_PER_SOL, "lamports")
+    console.log("🔍 Debug - Balance check result:", balance < 0.008 * LAMPORTS_PER_SOL)
 
-    const minimumBalance = 0.005 * LAMPORTS_PER_SOL
+    const minimumBalance = 0.008 * LAMPORTS_PER_SOL // User has 0.00976 SOL, so this should pass
     if (balance < minimumBalance) {
       throw new Error(
         `Insufficient SOL in creator wallet. Balance: ${(balance / LAMPORTS_PER_SOL).toFixed(6)} SOL. Minimum required: ${(minimumBalance / LAMPORTS_PER_SOL).toFixed(3)} SOL. Please fund the wallet.`,
