@@ -4,7 +4,7 @@ globalThis.Buffer = Buffer
 
 import { Connection, PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
-import { createV1, mplCore } from "@metaplex-foundation/mpl-core"
+import { create, mplCore } from "@metaplex-foundation/mpl-core"
 import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
 import axios from "axios"
@@ -243,17 +243,16 @@ async function uploadToPinata(metadata) {
 }
 
 // Real NFT Minting with Metaplex Core
-async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl, creatorKeypair, creatorUmi) {
+async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeypair, creatorUmi) {
   try {
     if (!creatorUmi) {
       throw new Error("Metaplex Core UMI not initialized - creator private key required")
     }
 
-    console.log("🎨 === STARTING REAL NFT MINT WITH METAPLEX CORE ===")
+    console.log("🎨 === STARTING REAL NFT MINT WITH CORE ==")
     console.log("👤 Recipient:", walletAddress)
     console.log("📋 Metadata URL:", metadataUrl)
     console.log("🏷️ NFT Name:", metadata.name)
-    console.log("🏷️ NFT Symbol:", metadata.symbol)
 
     console.log("🔗 Finding working RPC connection...")
     const workingConnection = await getWorkingRPCConnection()
@@ -285,37 +284,13 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl, cre
     const asset = generateSigner(creatorUmi)
     console.log("🔑 Generated asset address:", asset.publicKey)
 
-    console.log("⚡ Creating NFT with Metaplex Core...")
+    console.log("⚡ Creating NFT with Core (no plugins)...")
 
-    const createInstruction = createV1(creatorUmi, {
+    const createInstruction = create(creatorUmi, {
       asset,
       name: metadata.name || "Unnamed NFT",
       uri: metadataUrl,
       owner: publicKey(walletAddress),
-      plugins: [
-        {
-          __kind: "Royalties",
-          basisPoints: metadata.seller_fee_basis_points || 500,
-          creators: [
-            {
-              address: publicKey(creatorKeypair.publicKey.toString()),
-              percentage: 100,
-            },
-          ],
-          ruleSet: { __kind: "None" },
-        },
-        {
-          __kind: "Attributes",
-          attributeList: [
-            { key: "symbol", value: metadata.symbol || "XENO" },
-            { key: "creator", value: "x1xo.com" },
-            ...(metadata.attributes || []).map((attr) => ({
-              key: attr.trait_type,
-              value: String(attr.value),
-            })),
-          ],
-        },
-      ],
     })
 
     // Execute the transaction
@@ -325,7 +300,7 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl, cre
       send: { skipPreflight: false },
     })
 
-    console.log("🎉 === NFT MINTED SUCCESSFULLY WITH METAPLEX CORE! ===")
+    console.log("🎉 === NFT MINTED SUCCESSFULLY WITH CORE! ===")
     console.log("🔗 Asset address:", asset.publicKey)
     console.log("📝 Transaction signature:", result.signature)
 
@@ -339,15 +314,15 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl, cre
       transactionSignature: result.signature,
       metadataUrl: metadataUrl,
       explorerUrl: explorerUrl,
-      method: "metaplex_core",
+      method: "core",
       network: SOLANA_NETWORK,
     }
   } catch (error) {
-    console.error("❌ Metaplex Core minting failed:", error)
+    console.error("❌ Core minting failed:", error)
     return {
       success: false,
       error: error.message,
-      method: "metaplex_core",
+      method: "core",
     }
   }
 }
@@ -376,7 +351,7 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata } = req.body
 
-    console.log("🎨 === REAL NFT MINTING REQUEST (METAPLEX CORE) ===")
+    console.log("🎨 === REAL NFT MINTING REQUEST (CORE) ===")
     console.log("👤 Wallet:", walletAddress)
     console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
     console.log("🔑 Creator private key from Vercel env:", CREATOR_PRIVATE_KEY ? "Yes" : "No")
@@ -447,34 +422,17 @@ export default async function handler(req, res) {
     // Step 2: Create final metadata - MAGIC EDEN COMPATIBLE FORMAT
     const finalMetadata = {
       name: metadata.name || "WordPress NFT",
-      symbol: metadata.symbol || "XENO", // This symbol should now appear on Solana Explorer
+      symbol: metadata.symbol || "XENO",
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl,
       external_url: "https://x1xo.com",
-      seller_fee_basis_points: metadata.seller_fee_basis_points || 500, // 5% royalty for Magic Eden
       attributes: [
         { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
         { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Creator", value: "x1xo.com" }, // Updated creator name
+        { trait_type: "Creator", value: "x1xo.com" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
         ...(metadata.attributes || []),
       ],
-      properties: {
-        files: [
-          {
-            uri: finalImageUrl,
-            type: finalImageUrl.includes(".jpg") || finalImageUrl.includes(".jpeg") ? "image/jpeg" : "image/png",
-          },
-        ],
-        category: "image",
-        creators: [
-          {
-            address: creatorKeypair.publicKey.toString(),
-            verified: true,
-            share: 100,
-          },
-        ],
-      },
     }
 
     console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
@@ -491,14 +449,8 @@ export default async function handler(req, res) {
     }
 
     // Step 4: Mint NFT with Metaplex Core
-    console.log("⚡ Step 3: Minting NFT with Metaplex Core...")
-    const mintResult = await mintNFTWithMetaplexCore(
-      walletAddress,
-      finalMetadata,
-      uploadResult.url,
-      creatorKeypair,
-      creatorUmi,
-    )
+    console.log("⚡ Step 3: Minting NFT with Core...")
+    const mintResult = await mintNFTWithCore(walletAddress, finalMetadata, uploadResult.url, creatorKeypair, creatorUmi)
 
     if (!mintResult.success) {
       return res.status(500).json({
@@ -508,7 +460,7 @@ export default async function handler(req, res) {
       })
     }
 
-    console.log("🎉 === NFT MINTING COMPLETE (METAPLEX CORE) ===")
+    console.log("🎉 === NFT MINTING COMPLETE (CORE) ===")
 
     res.json({
       success: true,
@@ -518,8 +470,8 @@ export default async function handler(req, res) {
       imageUrl: finalImageUrl,
       explorerUrl: mintResult.explorerUrl,
       network: SOLANA_NETWORK,
-      method: "metaplex_core",
-      message: "NFT minted successfully on Solana with Metaplex Core!",
+      method: "core",
+      message: "NFT minted successfully on Solana with Core!",
     })
   } catch (error) {
     console.error("❌ Mint NFT error:", error)
