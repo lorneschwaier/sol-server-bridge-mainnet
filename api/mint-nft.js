@@ -197,13 +197,13 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     console.log("📋 Metadata URL:", metadataUrl)
     console.log("🏷️ NFT Name:", metadata.name)
 
-    // Check creator wallet balance
+    // Simple balance check - exactly like the working version
     const balance = await connection.getBalance(creatorKeypair.publicKey)
     console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
 
     if (balance < 0.01 * LAMPORTS_PER_SOL) {
       throw new Error(
-        `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet.`,
+        `Insufficient SOL in creator wallet. Balance: ${(balance / LAMPORTS_PER_SOL).toFixed(6)} SOL. Please fund the wallet.`,
       )
     }
 
@@ -213,26 +213,12 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
 
     console.log("⚡ Creating NFT with Metaplex Core...")
 
-    // Create the NFT using Metaplex Core with proper symbol and creator
+    // Simple NFT creation - like the working version
     const createInstruction = createV1(creatorUmi, {
       asset,
       name: metadata.name || "Unnamed NFT",
       uri: metadataUrl,
       owner: publicKey(walletAddress),
-      symbol: metadata.symbol || "XENO",
-      plugins: [
-        {
-          type: "Royalties",
-          basisPoints: 500, // 5% royalty
-          creators: [
-            {
-              address: publicKey(creatorKeypair.publicKey.toString()),
-              percentage: 100,
-            },
-          ],
-          ruleSet: "None",
-        },
-      ],
     })
 
     // Execute the transaction
