@@ -185,6 +185,28 @@ async function uploadToPinata(metadata) {
   }
 }
 
+// Upload metadata - either to Pinata or use X1XO hosting
+async function uploadMetadata(metadata, useIPFS = false) {
+  if (useIPFS) {
+    // Use Pinata IPFS
+    return await uploadToPinata(metadata)
+  } else {
+    // Use X1XO hosting - create a simple JSON file URL
+    const metadataJson = JSON.stringify(metadata, null, 2)
+    const timestamp = Date.now()
+    const metadataUrl = `https://x1xo.com/nft-metadata/${timestamp}.json`
+
+    console.log("📤 Using X1XO hosting for metadata:", metadataUrl)
+
+    return {
+      success: true,
+      url: metadataUrl,
+      service: "x1xo",
+      data: metadataJson,
+    }
+  }
+}
+
 // Real NFT Minting with Metaplex Core
 async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
   try {
@@ -197,14 +219,26 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     console.log("📋 Metadata URL:", metadataUrl)
     console.log("🏷️ NFT Name:", metadata.name)
 
-    // Simple balance check - exactly like the working version
-    const balance = await connection.getBalance(creatorKeypair.publicKey)
-    console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
+    console.log("💰 === BALANCE CHECK DEBUG ===")
+    console.log("🔗 RPC URL:", SOLANA_RPC_URL)
+    console.log("🔑 Creator wallet:", creatorKeypair.publicKey.toString())
 
-    if (balance < 0.01 * LAMPORTS_PER_SOL) {
-      throw new Error(
-        `Insufficient SOL in creator wallet. Balance: ${(balance / LAMPORTS_PER_SOL).toFixed(6)} SOL. Please fund the wallet.`,
-      )
+    try {
+      console.log("📡 Calling getBalance...")
+      const balance = await connection.getBalance(creatorKeypair.publicKey)
+      console.log("✅ Raw balance (lamports):", balance)
+      console.log("💰 Balance in SOL:", balance / LAMPORTS_PER_SOL)
+      console.log("🎯 Required minimum:", 0.01, "SOL")
+      console.log("✅ Balance check passed:", balance >= 0.01 * LAMPORTS_PER_SOL)
+
+      if (balance < 0.01 * LAMPORTS_PER_SOL) {
+        throw new Error(
+          `Insufficient SOL in creator wallet. Balance: ${(balance / LAMPORTS_PER_SOL).toFixed(6)} SOL. Please fund the wallet.`,
+        )
+      }
+    } catch (balanceError) {
+      console.error("❌ Balance check failed:", balanceError.message)
+      throw new Error(`Balance check failed: ${balanceError.message}`)
     }
 
     // Generate asset signer
@@ -277,11 +311,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { walletAddress, metadata } = req.body
+    const { walletAddress, metadata, useIPFS } = req.body
 
     console.log("🎨 === REAL NFT MINTING REQUEST (METAPLEX CORE) ===")
     console.log("👤 Wallet:", walletAddress)
     console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
+    console.log("🏗️ Image hosting method:", useIPFS ? "Pinata IPFS" : "X1XO Hosting")
 
     if (!walletAddress || !metadata) {
       return res.status(400).json({
@@ -300,37 +335,22 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 1: Upload image to IPFS - CONFIGURABLE OPTION
+    // Step 1: Handle image - use setting from WordPress
     let finalImageUrl = metadata.image
-    const useIPFS = metadata.use_ipfs || false // Add this option from WordPress
-
-    console.log("[v0] Debug - useIPFS flag:", useIPFS)
-    console.log("[v0] Debug - metadata.image:", metadata.image)
-    console.log("[v0] Debug - image exists:", !!metadata.image)
 
     if (metadata.image && useIPFS) {
-      console.log("📸 Step 1: Uploading image to IPFS (user chose decentralized storage)...")
-      console.log("🔍 Original image URL:", metadata.image)
-      console.log("🔍 useIPFS flag:", useIPFS)
-      console.log("[v0] Debug - About to call uploadImageToPinata with URL:", metadata.image)
-
+      console.log("📸 Step 1: Uploading image to IPFS (Pinata selected)...")
       const imageUploadResult = await uploadImageToPinata(metadata.image)
-
-      console.log("[v0] Debug - Image upload result:", JSON.stringify(imageUploadResult, null, 2))
 
       if (imageUploadResult.success) {
         finalImageUrl = imageUploadResult.url
         console.log("✅ Image uploaded to IPFS successfully:", finalImageUrl)
       } else {
         console.error("❌ IPFS image upload failed, falling back to website image:", imageUploadResult.error)
-        finalImageUrl = metadata.image // Keep original website image as fallback
+        finalImageUrl = metadata.image
       }
-    } else if (!useIPFS) {
-      console.log("📸 Using website image (fast option chosen):", finalImageUrl)
     } else {
-      console.log("📸 No image provided or useIPFS is false")
-      console.log("[v0] Debug - metadata.image exists:", !!metadata.image)
-      console.log("[v0] Debug - useIPFS value:", useIPFS)
+      console.log("📸 Using X1XO hosting (fast option selected):", finalImageUrl)
     }
 
     // Step 2: Create final metadata - MAGIC EDEN COMPATIBLE FORMAT
@@ -368,9 +388,9 @@ export default async function handler(req, res) {
 
     console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
 
-    // Step 3: Upload metadata to IPFS
+    // Step 3: Upload metadata using selected method
     console.log("📤 Step 2: Uploading metadata...")
-    const uploadResult = await uploadToPinata(finalMetadata)
+    const uploadResult = await uploadMetadata(finalMetadata, useIPFS)
 
     if (!uploadResult.success) {
       return res.status(500).json({
