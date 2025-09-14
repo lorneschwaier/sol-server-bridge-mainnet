@@ -185,28 +185,6 @@ async function uploadToPinata(metadata) {
   }
 }
 
-// Upload metadata - either to Pinata or use X1XO hosting
-async function uploadMetadata(metadata, useIPFS = false) {
-  if (useIPFS) {
-    // Use Pinata IPFS
-    return await uploadToPinata(metadata)
-  } else {
-    // Use X1XO hosting - create a simple JSON file URL
-    const metadataJson = JSON.stringify(metadata, null, 2)
-    const timestamp = Date.now()
-    const metadataUrl = `https://x1xo.com/nft-metadata/${timestamp}.json`
-
-    console.log("📤 Using X1XO hosting for metadata:", metadataUrl)
-
-    return {
-      success: true,
-      url: metadataUrl,
-      service: "x1xo",
-      data: metadataJson,
-    }
-  }
-}
-
 // Real NFT Minting with Metaplex Core
 async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
   try {
@@ -219,13 +197,24 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     console.log("📋 Metadata URL:", metadataUrl)
     console.log("🏷️ NFT Name:", metadata.name)
 
+    console.log("🔗 Testing RPC connection to:", SOLANA_RPC_URL)
+    try {
+      const slot = await connection.getSlot()
+      console.log("✅ RPC connection working, current slot:", slot)
+    } catch (rpcError) {
+      console.error("❌ RPC connection failed:", rpcError.message)
+      throw new Error("RPC connection failed: " + rpcError.message)
+    }
+
     // Simple balance check like the working version
     const balance = await connection.getBalance(creatorKeypair.publicKey)
     console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
+    console.log("💰 Balance in lamports:", balance)
+    console.log("💰 Required minimum:", 0.01 * LAMPORTS_PER_SOL, "lamports")
 
     if (balance < 0.01 * LAMPORTS_PER_SOL) {
       throw new Error(
-        `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Minimum required: 0.01 SOL. Please fund the wallet.`,
+        `Insufficient SOL in creator wallet. Balance: ${(balance / LAMPORTS_PER_SOL).toFixed(6)} SOL. Minimum required: 0.01 SOL. Please fund the wallet.`,
       )
     }
 
@@ -299,12 +288,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { walletAddress, metadata, useIPFS } = req.body
+    const { walletAddress, metadata } = req.body
 
     console.log("🎨 === REAL NFT MINTING REQUEST (METAPLEX CORE) ===")
     console.log("👤 Wallet:", walletAddress)
     console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
-    console.log("🏗️ Image hosting method:", useIPFS ? "Pinata IPFS" : "X1XO Hosting")
+    console.log("🏗️ Image hosting method: Pinata IPFS (permanent storage for NFTs)")
 
     if (!walletAddress || !metadata) {
       return res.status(400).json({
@@ -323,11 +312,11 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 1: Handle image - use setting from WordPress
+    // Step 1: Always upload image to Pinata for NFTs
     let finalImageUrl = metadata.image
 
-    if (metadata.image && useIPFS) {
-      console.log("📸 Step 1: Uploading image to IPFS (Pinata selected)...")
+    if (metadata.image) {
+      console.log("📸 Step 1: Uploading image to IPFS (Pinata for permanent storage)...")
       const imageUploadResult = await uploadImageToPinata(metadata.image)
 
       if (imageUploadResult.success) {
@@ -337,8 +326,6 @@ export default async function handler(req, res) {
         console.error("❌ IPFS image upload failed, falling back to website image:", imageUploadResult.error)
         finalImageUrl = metadata.image
       }
-    } else {
-      console.log("📸 Using X1XO hosting (fast option selected):", finalImageUrl)
     }
 
     // Step 2: Create final metadata - MAGIC EDEN COMPATIBLE FORMAT
@@ -376,9 +363,9 @@ export default async function handler(req, res) {
 
     console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
 
-    // Step 3: Upload metadata using selected method
-    console.log("📤 Step 2: Uploading metadata...")
-    const uploadResult = await uploadMetadata(finalMetadata, useIPFS)
+    // Step 3: Always upload metadata to Pinata for NFTs
+    console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
+    const uploadResult = await uploadToPinata(finalMetadata)
 
     if (!uploadResult.success) {
       return res.status(500).json({
