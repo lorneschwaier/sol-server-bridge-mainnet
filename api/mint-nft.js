@@ -2,7 +2,7 @@
 import { Buffer } from "buffer"
 globalThis.Buffer = Buffer
 
-import { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } from "@solana/web3.js"
+import { Connection, PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
 import { createV1, mplCore } from "@metaplex-foundation/mpl-core"
 import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
@@ -13,18 +13,53 @@ import FormData from "form-data"
 
 // Environment variables
 const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
-const SOLANA_RPC_URL =
-  process.env.SOLANA_RPC_URL ||
-  (SOLANA_NETWORK === "mainnet-beta"
-    ? "https://api.mainnet-beta.solana.com" // Official Solana RPC
-    : clusterApiUrl(SOLANA_NETWORK))
+
+const RPC_ENDPOINTS = [
+  process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
+  "https://solana-api.projectserum.com",
+  "https://rpc.ankr.com/solana",
+  "https://solana-mainnet.g.alchemy.com/v2/demo",
+  "https://api.mainnet-beta.solana.com",
+]
+
+async function getWorkingRPCConnection() {
+  for (const rpcUrl of RPC_ENDPOINTS) {
+    try {
+      console.log(`🔗 Testing RPC endpoint: ${rpcUrl}`)
+      const testConnection = new Connection(rpcUrl, "confirmed")
+      const slot = await testConnection.getSlot()
+      console.log(`✅ RPC endpoint working: ${rpcUrl} (slot: ${slot})`)
+      return testConnection
+    } catch (error) {
+      console.log(`❌ RPC endpoint failed: ${rpcUrl} - ${error.message}`)
+      continue
+    }
+  }
+  throw new Error("All RPC endpoints failed")
+}
+
+async function getBalanceWithFallback(publicKey) {
+  for (const rpcUrl of RPC_ENDPOINTS) {
+    try {
+      console.log(`💰 Trying balance check with: ${rpcUrl}`)
+      const testConnection = new Connection(rpcUrl, "confirmed")
+      const balance = await testConnection.getBalance(publicKey)
+      console.log(`✅ Balance check successful: ${balance / LAMPORTS_PER_SOL} SOL`)
+      return balance
+    } catch (error) {
+      console.log(`❌ Balance check failed with ${rpcUrl}: ${error.message}`)
+      continue
+    }
+  }
+  throw new Error("failed to get balance of account " + publicKey.toString() + ": All RPC endpoints failed")
+}
+
+// Initialize Solana connection with first endpoint
+const connection = new Connection(RPC_ENDPOINTS[0], "confirmed")
 
 const PINATA_API_KEY = process.env.PINATA_API_KEY
 const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
 const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY // Declare the creatorPrivateKey variable
-
-// Initialize Solana connection
-const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
 // Upload image to Pinata IPFS
 async function uploadImageToPinata(imageUrl) {
@@ -163,53 +198,26 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl, cre
     console.log("📋 Metadata URL:", metadataUrl)
     console.log("🏷️ NFT Name:", metadata.name)
 
-    console.log("🔗 Testing RPC connection to:", SOLANA_RPC_URL)
-    try {
-      const slot = await connection.getSlot()
-      console.log("✅ RPC connection working, current slot:", slot)
-    } catch (rpcError) {
-      console.error("❌ RPC connection failed:", rpcError.message)
-      throw new Error("RPC connection failed: " + rpcError.message)
-    }
+    console.log("🔗 Finding working RPC connection...")
+    const workingConnection = await getWorkingRPCConnection()
+    console.log("✅ Found working RPC connection")
 
     console.log("💰 === BALANCE CHECK ===")
     console.log("🔑 Creator private key (first 10 chars):", CREATOR_PRIVATE_KEY.substring(0, 10) + "...")
     console.log("🔑 Creator wallet address:", creatorKeypair.publicKey.toString())
-    console.log("🌐 RPC URL:", SOLANA_RPC_URL)
 
-    console.log("💰 Attempting balance check...")
+    console.log("💰 Attempting balance check with fallback endpoints...")
 
     try {
-      const balance = await connection.getBalance(creatorKeypair.publicKey)
+      const balance = await getBalanceWithFallback(creatorKeypair.publicKey)
       const balanceSOL = balance / LAMPORTS_PER_SOL
       console.log("💰 Raw balance (lamports):", balance)
       console.log("💰 Balance (SOL):", balanceSOL.toFixed(6))
 
-      if (balance === 0) {
-        console.log("⚠️ Balance is 0, trying alternative RPC endpoint...")
-        const altConnection = new Connection("https://solana-api.projectserum.com", "confirmed")
-        const altBalance = await altConnection.getBalance(creatorKeypair.publicKey)
-        console.log("💰 Alternative RPC balance:", altBalance / LAMPORTS_PER_SOL, "SOL")
-
-        if (altBalance > 0) {
-          console.log("✅ Alternative RPC shows balance, using that value")
-          const finalBalance = altBalance
-          if (finalBalance < 0.01 * LAMPORTS_PER_SOL) {
-            throw new Error(
-              `Insufficient SOL in creator wallet. Balance: ${(finalBalance / LAMPORTS_PER_SOL).toFixed(6)} SOL. Minimum required: 0.01 SOL. Please fund wallet: ${creatorKeypair.publicKey.toString()}`,
-            )
-          }
-        } else {
-          throw new Error(
-            `Creator wallet has no SOL. Balance: 0.000000 SOL. Minimum required: 0.01 SOL. Please fund wallet: ${creatorKeypair.publicKey.toString()}`,
-          )
-        }
-      } else {
-        if (balance < 0.01 * LAMPORTS_PER_SOL) {
-          throw new Error(
-            `Insufficient SOL in creator wallet. Balance: ${balanceSOL.toFixed(6)} SOL. Minimum required: 0.01 SOL. Please fund wallet: ${creatorKeypair.publicKey.toString()}`,
-          )
-        }
+      if (balance < 0.01 * LAMPORTS_PER_SOL) {
+        throw new Error(
+          `Insufficient SOL in creator wallet. Balance: ${balanceSOL.toFixed(6)} SOL. Minimum required: 0.01 SOL. Please fund wallet: ${creatorKeypair.publicKey.toString()}`,
+        )
       }
     } catch (balanceError) {
       console.error("❌ Balance check failed:", balanceError.message)
@@ -317,7 +325,7 @@ export default async function handler(req, res) {
       creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
       console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
 
-      const umi = createUmi(SOLANA_RPC_URL).use(mplCore())
+      const umi = createUmi(RPC_ENDPOINTS[0]).use(mplCore())
       const umiKeypair = fromWeb3JsKeypair(creatorKeypair)
       creatorUmi = umi.use(keypairIdentity(umiKeypair))
 
