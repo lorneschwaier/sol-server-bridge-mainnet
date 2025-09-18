@@ -301,7 +301,6 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
               percentage: 100,
             },
           ],
-          ruleSet: "None",
         },
         {
           type: "Attributes",
@@ -445,7 +444,7 @@ export default async function handler(req, res) {
       symbol: metadata.symbol || "XENO", // Keep symbol for compatibility
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl,
-      external_url: "https://x1xo.com",
+      external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       seller_fee_basis_points: 300, // 3% royalty
       properties: {
         files: [
