@@ -307,8 +307,28 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
           type: "Attributes",
           attributeList: [
             { key: "symbol", value: metadata.symbol || "XENO" },
+            { key: "collection_symbol", value: metadata.symbol || "XENO" },
             { key: "collection", value: "Xeno AI NFT Collection" },
+            { key: "collection_name", value: "Xeno AI NFT Collection" },
+            {
+              key: "external_url",
+              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+            },
+            {
+              key: "website",
+              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+            },
+            {
+              key: "homepage",
+              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+            },
+            { key: "creator", value: "x1xo.com" },
+            { key: "platform", value: "WordPress" },
           ],
+        },
+        {
+          type: "Edition",
+          number: 1,
         },
       ],
     })
@@ -480,6 +500,7 @@ export default async function handler(req, res) {
       collection: {
         name: "Xeno AI NFT Collection",
         family: "Xeno AI",
+        symbol: metadata.symbol || "XENO", // Add symbol to collection for better explorer recognition
       },
     }
 
