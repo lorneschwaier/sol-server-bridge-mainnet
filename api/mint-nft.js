@@ -333,8 +333,19 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
               key: "link",
               value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
             },
+            {
+              key: "web_url",
+              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+            },
+            {
+              key: "site_url",
+              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+            },
             { key: "creator", value: "x1xo.com" },
             { key: "platform", value: "WordPress" },
+            { key: "token_standard", value: "NonFungible" },
+            { key: "is_mutable", value: "true" },
+            { key: "primary_sale_happened", value: "false" },
           ],
         },
         {
@@ -470,7 +481,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // Step 2: Create final metadata - MAGIC EDEN COMPATIBLE FORMAT
+    // Step 2: Create final metadata - ENHANCED FOR WALLET COMPATIBILITY
     const finalMetadata = {
       name: metadata.name || "WordPress NFT",
       symbol: metadata.symbol || "XENO", // Keep symbol for compatibility
@@ -520,6 +531,8 @@ export default async function handler(req, res) {
         name: "Xeno AI NFT Collection",
         family: "Xeno AI",
         symbol: metadata.symbol || "XENO", // Add symbol to collection for better explorer recognition
+        verified: true,
+        key: creatorKeypair.publicKey.toString(),
       },
       website: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       homepage: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
@@ -527,6 +540,19 @@ export default async function handler(req, res) {
       token_symbol: metadata.symbol || "XENO",
       collection_symbol: metadata.symbol || "XENO",
       nft_symbol: metadata.symbol || "XENO",
+      animation_url: null,
+      youtube_url: null,
+      twitter: null,
+      discord: null,
+      compiler: "WordPress NFT Maker",
+      date: new Date().toISOString().split("T")[0],
+      dna: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      edition: 1,
+      is_mutable: true,
+      primary_sale_happened: false,
+      update_authority: creatorKeypair.publicKey.toString(),
+      mint: "", // Will be filled after minting
+      token_standard: "NonFungible",
     }
 
     console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
