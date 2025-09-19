@@ -308,6 +308,9 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
           attributeList: [
             { key: "symbol", value: metadata.symbol || "XENO" },
             { key: "collection_symbol", value: metadata.symbol || "XENO" },
+            { key: "token_symbol", value: metadata.symbol || "XENO" },
+            { key: "nft_symbol", value: metadata.symbol || "XENO" },
+            { key: "ticker", value: metadata.symbol || "XENO" },
             { key: "collection", value: "Xeno AI NFT Collection" },
             { key: "collection_name", value: "Xeno AI NFT Collection" },
             {
@@ -320,6 +323,14 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
             },
             {
               key: "homepage",
+              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+            },
+            {
+              key: "url",
+              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+            },
+            {
+              key: "link",
               value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
             },
             { key: "creator", value: "x1xo.com" },
@@ -495,6 +506,14 @@ export default async function handler(req, res) {
         { trait_type: "Creator", value: "x1xo.com" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
         { trait_type: "Symbol", value: metadata.symbol || "XENO" }, // Add symbol as attribute
+        {
+          trait_type: "Website",
+          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+        },
+        {
+          trait_type: "External URL",
+          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+        },
         ...(metadata.attributes || []),
       ],
       collection: {
@@ -502,6 +521,12 @@ export default async function handler(req, res) {
         family: "Xeno AI",
         symbol: metadata.symbol || "XENO", // Add symbol to collection for better explorer recognition
       },
+      website: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+      homepage: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+      url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+      token_symbol: metadata.symbol || "XENO",
+      collection_symbol: metadata.symbol || "XENO",
+      nft_symbol: metadata.symbol || "XENO",
     }
 
     console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
