@@ -310,16 +310,26 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
             { key: "collection_symbol", value: metadata.symbol || "XENO" },
             { key: "token_symbol", value: metadata.symbol || "XENO" },
             { key: "collection", value: "Xeno AI NFT Collection" },
+            { key: "collection_name", value: "Xeno AI NFT Collection" },
+            { key: "website", value: "https://x1xo.com" },
+            { key: "homepage", value: "https://x1xo.com" },
             {
               key: "external_url",
               value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
             },
-            { key: "website", value: "https://x1xo.com" },
+            {
+              key: "product_url",
+              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+            },
             { key: "creator", value: "x1xo.com" },
             { key: "platform", value: "WordPress" },
             { key: "token_standard", value: "NonFungible" },
             { key: "is_mutable", value: "true" },
             { key: "primary_sale_happened", value: "false" },
+            { key: "seller_fee_basis_points", value: "300" },
+            { key: "image", value: metadata.image },
+            { key: "name", value: metadata.name || "WordPress NFT" },
+            { key: "description", value: metadata.description || "NFT created via WordPress" },
           ],
         },
         {
@@ -462,6 +472,9 @@ export default async function handler(req, res) {
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl,
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`, // Product page URL
+      website: "https://x1xo.com", // Main website URL - moved to top level
+      twitter: null,
+      discord: null,
       seller_fee_basis_points: 300, // 3% royalty
       properties: {
         files: [
@@ -502,14 +515,11 @@ export default async function handler(req, res) {
         name: "Xeno AI NFT Collection",
         family: "Xeno AI",
         symbol: metadata.symbol || "XENO", // Collection symbol for explorer recognition
-        verified: true,
+        verified: false, // Set to false unless you have verified collection
         key: creatorKeypair.publicKey.toString(),
       },
-      website: "https://x1xo.com", // Main website URL
       animation_url: null,
       youtube_url: null,
-      twitter: null,
-      discord: null,
       compiler: "WordPress NFT Maker",
       date: new Date().toISOString().split("T")[0], // Clean date without timestamp
       dna: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
