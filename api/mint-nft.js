@@ -309,38 +309,12 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
             { key: "symbol", value: metadata.symbol || "XENO" },
             { key: "collection_symbol", value: metadata.symbol || "XENO" },
             { key: "token_symbol", value: metadata.symbol || "XENO" },
-            { key: "nft_symbol", value: metadata.symbol || "XENO" },
-            { key: "ticker", value: metadata.symbol || "XENO" },
             { key: "collection", value: "Xeno AI NFT Collection" },
-            { key: "collection_name", value: "Xeno AI NFT Collection" },
             {
               key: "external_url",
               value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
             },
-            {
-              key: "website",
-              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-            },
-            {
-              key: "homepage",
-              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-            },
-            {
-              key: "url",
-              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-            },
-            {
-              key: "link",
-              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-            },
-            {
-              key: "web_url",
-              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-            },
-            {
-              key: "site_url",
-              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-            },
+            { key: "website", value: "https://x1xo.com" },
             { key: "creator", value: "x1xo.com" },
             { key: "platform", value: "WordPress" },
             { key: "token_standard", value: "NonFungible" },
@@ -484,10 +458,10 @@ export default async function handler(req, res) {
     // Step 2: Create final metadata - ENHANCED FOR WALLET COMPATIBILITY
     const finalMetadata = {
       name: metadata.name || "WordPress NFT",
-      symbol: metadata.symbol || "XENO", // Keep symbol for compatibility
+      symbol: metadata.symbol || "XENO", // Primary symbol field for Solana Explorer
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl,
-      external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+      external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`, // Product page URL
       seller_fee_basis_points: 300, // 3% royalty
       properties: {
         files: [
@@ -515,14 +489,11 @@ export default async function handler(req, res) {
         { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo.com" },
-        { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
-        { trait_type: "Symbol", value: metadata.symbol || "XENO" }, // Add symbol as attribute
+        { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] }, // Clean date format
+        { trait_type: "Symbol", value: metadata.symbol || "XENO" },
+        { trait_type: "Website", value: "https://x1xo.com" },
         {
-          trait_type: "Website",
-          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-        },
-        {
-          trait_type: "External URL",
+          trait_type: "Product Page",
           value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
         },
         ...(metadata.attributes || []),
@@ -530,22 +501,17 @@ export default async function handler(req, res) {
       collection: {
         name: "Xeno AI NFT Collection",
         family: "Xeno AI",
-        symbol: metadata.symbol || "XENO", // Add symbol to collection for better explorer recognition
+        symbol: metadata.symbol || "XENO", // Collection symbol for explorer recognition
         verified: true,
         key: creatorKeypair.publicKey.toString(),
       },
-      website: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-      homepage: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-      url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-      token_symbol: metadata.symbol || "XENO",
-      collection_symbol: metadata.symbol || "XENO",
-      nft_symbol: metadata.symbol || "XENO",
+      website: "https://x1xo.com", // Main website URL
       animation_url: null,
       youtube_url: null,
       twitter: null,
       discord: null,
       compiler: "WordPress NFT Maker",
-      date: new Date().toISOString().split("T")[0],
+      date: new Date().toISOString().split("T")[0], // Clean date without timestamp
       dna: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       edition: 1,
       is_mutable: true,
