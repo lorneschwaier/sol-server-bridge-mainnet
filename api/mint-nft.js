@@ -109,6 +109,24 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
     console.log("🏷️ NFT Name:", metadata.name)
     console.log("🔢 Collection Number:", collectionNumber)
 
+    const enhancedMetadata = {
+      name: metadata.name || "WordPress NFT",
+      symbol: "XENO",
+      description: metadata.description || "NFT created via WordPress",
+      image: metadata.image,
+      external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+      attributes: [
+        {
+          trait_type: "Creator",
+          value: "x1xo.com",
+        },
+        {
+          trait_type: "Collection",
+          value: collectionNumber,
+        },
+      ],
+    }
+
     const createInstruction = create(creatorUmi, {
       asset,
       name: metadata.name || "Unnamed NFT",
@@ -131,7 +149,7 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
 
     console.log("📡 Submitting transaction to Solana...")
     const result = await createInstruction.sendAndConfirm(creatorUmi, {
-      confirm: { commitment: "finalized" }, // Changed back to finalized for proper indexing
+      confirm: { commitment: "confirmed" },
       send: { skipPreflight: false },
     })
 
@@ -148,7 +166,7 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
           asset: asset.publicKey,
           newUpdateAuthority: null,
         }).sendAndConfirm(creatorUmi, {
-          confirm: { commitment: "finalized" }, // Changed to finalized
+          confirm: { commitment: "confirmed" },
         })
 
         immutableSignature = immutableResult.signature
@@ -165,8 +183,8 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
     console.log("🔗 Asset address:", asset.publicKey)
     console.log("📝 Transaction signature:", result.signature)
 
-    console.log("✅ Core NFT minted, waiting for proper indexing...")
-    await new Promise((resolve) => setTimeout(resolve, 15000)) // Increased wait time
+    console.log("✅ Core NFT minted, waiting for indexing...")
+    await new Promise((resolve) => setTimeout(resolve, 8000)) // Reduced wait time but still allowing for indexing
 
     console.log("🔄 Checking if asset is indexed...")
     try {
@@ -303,32 +321,14 @@ export default async function handler(req, res) {
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       attributes: [
         {
-          trait_type: "Collection #",
-          value: collectionNumber,
-        },
-        {
           trait_type: "Creator",
           value: "x1xo.com",
         },
         {
-          trait_type: "Website",
-          value: "https://x1xo.com",
-        },
-        {
-          trait_type: "Platform",
-          value: "WordPress",
+          trait_type: "Collection",
+          value: collectionNumber,
         },
       ],
-      properties: {
-        creators: [
-          {
-            address: creatorKeypair.publicKey.toString(),
-            verified: true,
-            share: 100,
-          },
-        ],
-        category: "image",
-      },
     }
 
     console.log("📋 Enhanced metadata with traits:", JSON.stringify(enhancedMetadata, null, 2))
