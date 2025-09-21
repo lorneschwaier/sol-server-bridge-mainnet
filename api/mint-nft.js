@@ -14,10 +14,9 @@ const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
 
 const RPC_ENDPOINTS = [
   process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
+  "https://api.mainnet-beta.solana.com",
   "https://solana-api.projectserum.com",
   "https://rpc.ankr.com/solana",
-  "https://solana-mainnet.g.alchemy.com/v2/demo",
-  "https://api.mainnet-beta.solana.com",
 ]
 
 async function getWorkingRPCConnection() {
@@ -132,7 +131,7 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
 
     console.log("📡 Submitting transaction to Solana...")
     const result = await createInstruction.sendAndConfirm(creatorUmi, {
-      confirm: { commitment: "confirmed" }, // Changed from finalized to confirmed for faster response
+      confirm: { commitment: "finalized" }, // Changed back to finalized for proper indexing
       send: { skipPreflight: false },
     })
 
@@ -143,20 +142,20 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
     if (makeImmutable) {
       console.log("🔒 Making NFT permanently immutable...")
       try {
-        await new Promise((resolve) => setTimeout(resolve, 2000)) // Reduced from 3000ms
+        await new Promise((resolve) => setTimeout(resolve, 5000))
 
         const immutableResult = await updateV1(creatorUmi, {
           asset: asset.publicKey,
-          newUpdateAuthority: null, // Remove update authority completely
+          newUpdateAuthority: null,
         }).sendAndConfirm(creatorUmi, {
-          confirm: { commitment: "confirmed" },
+          confirm: { commitment: "finalized" }, // Changed to finalized
         })
 
         immutableSignature = immutableResult.signature
-        console.log("✅ NFT is now PERMANENTLY IMMUTABLE - no one can ever change it")
+        console.log("✅ NFT is now PERMANENTLY IMMUTABLE")
         console.log("🔒 Immutable transaction:", immutableSignature)
       } catch (immutableError) {
-        console.log("⚠️ Could not remove update authority, but NFT is still minted:", immutableError.message)
+        console.log("⚠️ Could not remove update authority:", immutableError.message)
       }
     } else {
       console.log("🔓 NFT remains mutable - creator can update metadata")
@@ -166,8 +165,8 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
     console.log("🔗 Asset address:", asset.publicKey)
     console.log("📝 Transaction signature:", result.signature)
 
-    console.log("✅ Core NFT minted, waiting for indexing...")
-    await new Promise((resolve) => setTimeout(resolve, 10000)) // Reduced from 30000ms
+    console.log("✅ Core NFT minted, waiting for proper indexing...")
+    await new Promise((resolve) => setTimeout(resolve, 15000)) // Increased wait time
 
     console.log("🔄 Checking if asset is indexed...")
     try {
@@ -315,7 +314,21 @@ export default async function handler(req, res) {
           trait_type: "Website",
           value: "https://x1xo.com",
         },
+        {
+          trait_type: "Platform",
+          value: "WordPress",
+        },
       ],
+      properties: {
+        creators: [
+          {
+            address: creatorKeypair.publicKey.toString(),
+            verified: true,
+            share: 100,
+          },
+        ],
+        category: "image",
+      },
     }
 
     console.log("📋 Enhanced metadata with traits:", JSON.stringify(enhancedMetadata, null, 2))
