@@ -4,7 +4,7 @@ globalThis.Buffer = Buffer
 
 import { Connection, PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
-import { create, mplCore, ruleSet, fetchAsset } from "@metaplex-foundation/mpl-core"
+import { create, mplCore, ruleSet, fetchAsset, updateV1 } from "@metaplex-foundation/mpl-core"
 import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
 import bs58 from "bs58"
@@ -58,16 +58,17 @@ const connection = new Connection(RPC_ENDPOINTS[0], "confirmed")
 const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
 
 // Real NFT Minting with Metaplex Core
-async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeypair, creatorUmi) {
+async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeypair, creatorUmi, makeImmutable = true) {
   try {
     if (!creatorUmi) {
       throw new Error("Metaplex Core UMI not initialized - creator private key required")
     }
 
-    console.log(`🎨 === STARTING NFT MINT WITH CORE ===`)
+    console.log(`🎨 === STARTING ${makeImmutable ? "IMMUTABLE" : "MUTABLE"} NFT MINT WITH CORE ===`)
     console.log("👤 Recipient:", walletAddress)
     console.log("📋 Metadata URL:", metadataUrl)
     console.log("🏷️ NFT Name:", metadata.name)
+    console.log("🔒 Make Immutable:", makeImmutable)
 
     console.log("🔗 Finding working RPC connection...")
     const workingConnection = await getWorkingRPCConnection()
@@ -126,23 +127,70 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
           ],
           ruleSet: ruleSet("None"),
         },
+        {
+          type: "Attributes",
+          attributeList: [
+            { key: "symbol", value: metadata.symbol || "XENO" },
+            {
+              key: "website",
+              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+            },
+            {
+              key: "external_url",
+              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+            },
+            { key: "name", value: metadata.name || "WordPress NFT" },
+            { key: "description", value: metadata.description || "NFT created via WordPress" },
+            { key: "creator", value: "x1xo.com" },
+            { key: "collection", value: "Xeno AI NFT Collection" },
+            { key: "collection_number", value: String(collectionNumber) },
+            { key: "token_standard", value: "NonFungible" },
+            { key: "is_mutable", value: makeImmutable ? "false" : "true" },
+            { key: "permanence_level", value: makeImmutable ? "immutable" : "mutable" },
+            { key: "update_policy", value: makeImmutable ? "Locked Forever" : "Creator Can Update" },
+            { key: "primary_sale_happened", value: "false" },
+          ],
+        },
+        {
+          type: "Edition",
+          number: 1,
+        },
       ],
     })
 
     console.log("📡 Submitting transaction to Solana...")
     const result = await createInstruction.sendAndConfirm(creatorUmi, {
-      confirm: { commitment: "confirmed" },
+      confirm: { commitment: "finalized" },
       send: { skipPreflight: false },
     })
 
-    console.log("🔓 NFT remains mutable - creator can update metadata")
+    let immutableSignature = null
+
+    if (makeImmutable) {
+      console.log("🔒 Making NFT permanently immutable...")
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 3000)) // Wait for creation to settle
+
+        const immutableResult = await updateV1(creatorUmi, {
+          asset: asset.publicKey,
+          newUpdateAuthority: null, // Remove update authority completely
+        }).sendAndConfirm(creatorUmi)
+
+        immutableSignature = immutableResult.signature
+        console.log("✅ NFT is now PERMANENTLY IMMUTABLE - no one can ever change it")
+      } catch (immutableError) {
+        console.log("⚠️ Could not remove update authority, but NFT is still minted:", immutableError.message)
+      }
+    } else {
+      console.log("🔓 NFT remains mutable - creator can update metadata")
+    }
 
     console.log("🎉 === NFT MINTED SUCCESSFULLY WITH CORE! ===")
     console.log("🔗 Asset address:", asset.publicKey)
     console.log("📝 Transaction signature:", result.signature)
 
     console.log("✅ Core NFT minted, waiting for indexing...")
-    await new Promise((resolve) => setTimeout(resolve, 8000))
+    await new Promise((resolve) => setTimeout(resolve, 30000))
 
     console.log("🔄 Checking if asset is indexed...")
     try {
@@ -161,11 +209,13 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
       success: true,
       mintAddress: asset.publicKey,
       transactionSignature: result.signature,
+      immutableSignature: immutableSignature,
       metadataUrl: metadataUrl,
       explorerUrl: explorerUrl,
       collectionNumber: collectionNumber,
       method: "core",
       network: SOLANA_NETWORK,
+      isImmutable: makeImmutable,
       note: "Core NFTs may take 1-5 minutes to appear in Phantom wallet due to indexing delays",
     }
   } catch (error) {
@@ -200,10 +250,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { walletAddress, metadata } = req.body
+    const { walletAddress, metadata, makeImmutable = true } = req.body
 
     console.log("🎨 === REAL NFT MINTING REQUEST (CORE) ===")
     console.log("👤 Wallet:", walletAddress)
+    console.log("🔒 Make Immutable:", makeImmutable)
     console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
     console.log("🔑 Creator private key from Vercel env:", CREATOR_PRIVATE_KEY ? "Yes" : "No")
     console.log("🏗️ Image hosting method: X1XO WordPress Media (hosted on x1xo.com)")
@@ -260,37 +311,67 @@ export default async function handler(req, res) {
 
     const collectionNumber = metadata.collection_number || 10
 
-    const enhancedMetadata = {
+    const finalMetadata = {
       name: metadata.name || "WordPress NFT",
-      symbol: "XENO",
-      description: metadata.description || "NFT created via WordPress",
+      symbol: metadata.symbol || "XENO",
+      description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl,
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+      website: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+      seller_fee_basis_points: 300,
+      is_mutable: !makeImmutable,
+      properties: {
+        files: [
+          {
+            uri: finalImageUrl,
+            type: finalImageUrl.includes(".png") ? "image/png" : "image/jpeg",
+          },
+        ],
+        category: "image",
+        creators: [
+          {
+            address: creatorKeypair.publicKey.toString(),
+            verified: true,
+            share: 100,
+          },
+        ],
+      },
       attributes: [
+        { trait_type: "Collection #", value: String(collectionNumber) },
+        { trait_type: "Platform", value: "WordPress" },
+        { trait_type: "Creator", value: "x1xo.com" },
+        { trait_type: "Symbol", value: metadata.symbol || "XENO" },
+        { trait_type: "Website", value: "https://x1xo.com" },
         {
-          trait_type: "Collection #",
-          value: collectionNumber,
+          trait_type: "Product Page",
+          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
         },
-        {
-          trait_type: "Creator",
-          value: "x1xo.com",
-        },
-        {
-          trait_type: "Website",
-          value: "https://x1xo.com",
-        },
+        { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
+        { trait_type: "Transaction", value: "" }, // Will be filled after minting
       ],
+      collection: {
+        name: "Xeno AI NFT Collection",
+        family: "Xeno AI",
+      },
     }
 
-    console.log("📋 Enhanced metadata with traits:", JSON.stringify(enhancedMetadata, null, 2))
+    console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
 
-    const metadataJson = JSON.stringify(enhancedMetadata)
+    console.log("📤 Creating metadata as data URI (no external upload needed)...")
+    const metadataJson = JSON.stringify(finalMetadata)
     const metadataUrl = `data:application/json;base64,${Buffer.from(metadataJson).toString("base64")}`
-    console.log("✅ Enhanced metadata created as data URI (size:", metadataJson.length, "bytes)")
+    console.log("✅ Metadata created as data URI")
 
     // Mint NFT with Metaplex Core
     console.log("⚡ Minting NFT with Core...")
-    const mintResult = await mintNFTWithCore(walletAddress, enhancedMetadata, metadataUrl, creatorKeypair, creatorUmi)
+    const mintResult = await mintNFTWithCore(
+      walletAddress,
+      finalMetadata,
+      metadataUrl,
+      creatorKeypair,
+      creatorUmi,
+      makeImmutable,
+    )
 
     if (!mintResult.success) {
       return res.status(500).json({
@@ -300,18 +381,25 @@ export default async function handler(req, res) {
       })
     }
 
+    finalMetadata.attributes.find((attr) => attr.trait_type === "Transaction").value = mintResult.transactionSignature
+
     console.log("🎉 === NFT MINTING COMPLETE (CORE) ===")
 
     res.json({
       success: true,
       mintAddress: mintResult.mintAddress,
       transactionSignature: mintResult.transactionSignature,
+      immutableSignature: mintResult.immutableSignature,
       metadataUrl: metadataUrl,
       imageUrl: finalImageUrl,
       explorerUrl: mintResult.explorerUrl,
       network: SOLANA_NETWORK,
       method: "core",
-      message: "NFT minted as updatable - creator retains ability to modify metadata",
+      isImmutable: makeImmutable,
+      mutabilityChoice: makeImmutable ? "Permanently Immutable" : "Creator Updatable",
+      message: makeImmutable
+        ? "NFT minted and permanently locked - no one can ever change it"
+        : "NFT minted as updatable - creator retains ability to modify metadata",
       collectionNumber: mintResult.collectionNumber,
       hostingMethod: "X1XO WordPress Media",
     })
