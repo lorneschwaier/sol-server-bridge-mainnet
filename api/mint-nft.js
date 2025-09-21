@@ -537,14 +537,17 @@ export default async function handler(req, res) {
         ],
       },
       attributes: [
-        { trait_type: "Collection Number", value: String(collectionNumber || Math.floor(Math.random() * 10000) + 1) }, // Use collection number
+        { trait_type: "Collection #", value: String(metadata.collection_number || collectionNumber) }, // Use collection number from admin or generate random
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo.com" },
-        { trait_type: "Symbol", value: metadata.symbol || "XENO" }, // Explicit symbol attribute
-        { trait_type: "Is Mutable", value: makeImmutable ? "false" : "true" },
-        { trait_type: "Permanence", value: makeImmutable ? "Immutable" : "Mutable" },
-        { trait_type: "Update Policy", value: makeImmutable ? "Locked Forever" : "Creator Can Update" },
-        ...(metadata.attributes || []),
+        { trait_type: "Symbol", value: metadata.symbol || "XENO" },
+        { trait_type: "Website", value: "https://x1xo.com" },
+        {
+          trait_type: "Product Page",
+          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+        },
+        { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] }, // Clean date format YYYY-MM-DD
+        { trait_type: "Transaction", value: "" }, // Will be filled after minting
       ],
       collection: {
         name: "Xeno AI NFT Collection",
@@ -583,6 +586,8 @@ export default async function handler(req, res) {
         metadataUrl: uploadResult.url,
       })
     }
+
+    finalMetadata.attributes.find((attr) => attr.trait_type === "Transaction").value = mintResult.transactionSignature
 
     console.log("🎉 === NFT MINTING COMPLETE (CORE) ===")
 
