@@ -127,34 +127,6 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
           ],
           ruleSet: ruleSet("None"),
         },
-        {
-          type: "Attributes",
-          attributeList: [
-            { key: "symbol", value: metadata.symbol || "XENO" },
-            {
-              key: "website",
-              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-            },
-            {
-              key: "external_url",
-              value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-            },
-            { key: "name", value: metadata.name || "WordPress NFT" },
-            { key: "description", value: metadata.description || "NFT created via WordPress" },
-            { key: "creator", value: "x1xo.com" },
-            { key: "collection", value: "Xeno AI NFT Collection" },
-            { key: "collection_number", value: String(collectionNumber) },
-            { key: "token_standard", value: "NonFungible" },
-            { key: "is_mutable", value: makeImmutable ? "false" : "true" },
-            { key: "permanence_level", value: makeImmutable ? "immutable" : "mutable" },
-            { key: "update_policy", value: makeImmutable ? "Locked Forever" : "Creator Can Update" },
-            { key: "primary_sale_happened", value: "false" },
-          ],
-        },
-        {
-          type: "Edition",
-          number: 1,
-        },
       ],
     })
 
@@ -311,62 +283,25 @@ export default async function handler(req, res) {
 
     const collectionNumber = metadata.collection_number || 10
 
-    const finalMetadata = {
+    const minimalMetadata = {
       name: metadata.name || "WordPress NFT",
-      symbol: metadata.symbol || "XENO",
-      description: metadata.description || "NFT created via WordPress store",
+      symbol: "XENO",
+      description: "NFT via WordPress",
       image: finalImageUrl,
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-      website: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-      seller_fee_basis_points: 300,
-      is_mutable: !makeImmutable,
-      properties: {
-        files: [
-          {
-            uri: finalImageUrl,
-            type: finalImageUrl.includes(".png") ? "image/png" : "image/jpeg",
-          },
-        ],
-        category: "image",
-        creators: [
-          {
-            address: creatorKeypair.publicKey.toString(),
-            verified: true,
-            share: 100,
-          },
-        ],
-      },
-      attributes: [
-        { trait_type: "Collection #", value: String(collectionNumber) },
-        { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Creator", value: "x1xo.com" },
-        { trait_type: "Symbol", value: metadata.symbol || "XENO" },
-        { trait_type: "Website", value: "https://x1xo.com" },
-        {
-          trait_type: "Product Page",
-          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-        },
-        { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
-        { trait_type: "Transaction", value: "" }, // Will be filled after minting
-      ],
-      collection: {
-        name: "Xeno AI NFT Collection",
-        family: "Xeno AI",
-      },
     }
 
-    console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
+    console.log("📋 Ultra-minimal metadata:", JSON.stringify(minimalMetadata, null, 2))
 
-    console.log("📤 Creating metadata as data URI (no external upload needed)...")
-    const metadataJson = JSON.stringify(finalMetadata)
+    const metadataJson = JSON.stringify(minimalMetadata)
     const metadataUrl = `data:application/json;base64,${Buffer.from(metadataJson).toString("base64")}`
-    console.log("✅ Metadata created as data URI")
+    console.log("✅ Ultra-minimal metadata created as data URI (size:", metadataJson.length, "bytes)")
 
     // Mint NFT with Metaplex Core
     console.log("⚡ Minting NFT with Core...")
     const mintResult = await mintNFTWithCore(
       walletAddress,
-      finalMetadata,
+      minimalMetadata,
       metadataUrl,
       creatorKeypair,
       creatorUmi,
@@ -380,8 +315,6 @@ export default async function handler(req, res) {
         metadataUrl: metadataUrl,
       })
     }
-
-    finalMetadata.attributes.find((attr) => attr.trait_type === "Transaction").value = mintResult.transactionSignature
 
     console.log("🎉 === NFT MINTING COMPLETE (CORE) ===")
 
