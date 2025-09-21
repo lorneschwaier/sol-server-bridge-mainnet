@@ -283,25 +283,61 @@ export default async function handler(req, res) {
 
     const collectionNumber = metadata.collection_number || 10
 
-    const minimalMetadata = {
+    const enhancedMetadata = {
       name: metadata.name || "WordPress NFT",
       symbol: "XENO",
-      description: "NFT via WordPress",
+      description: metadata.description || "NFT created via WordPress",
       image: finalImageUrl,
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+      attributes: [
+        {
+          trait_type: "Collection #",
+          value: collectionNumber,
+        },
+        {
+          trait_type: "Platform",
+          value: "WordPress",
+        },
+        {
+          trait_type: "Creator",
+          value: "x1xo.com",
+        },
+        {
+          trait_type: "Website",
+          value: "https://x1xo.com",
+        },
+        {
+          trait_type: "Product Page",
+          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+        },
+        {
+          trait_type: "Minted Date",
+          value: new Date().toISOString().split("T")[0],
+        },
+      ],
+      properties: {
+        category: "image",
+        creators: [
+          {
+            address: creatorKeypair.publicKey.toString(),
+            verified: true,
+            share: 100,
+          },
+        ],
+      },
     }
 
-    console.log("📋 Ultra-minimal metadata:", JSON.stringify(minimalMetadata, null, 2))
+    console.log("📋 Enhanced metadata with traits:", JSON.stringify(enhancedMetadata, null, 2))
 
-    const metadataJson = JSON.stringify(minimalMetadata)
+    const metadataJson = JSON.stringify(enhancedMetadata)
     const metadataUrl = `data:application/json;base64,${Buffer.from(metadataJson).toString("base64")}`
-    console.log("✅ Ultra-minimal metadata created as data URI (size:", metadataJson.length, "bytes)")
+    console.log("✅ Enhanced metadata created as data URI (size:", metadataJson.length, "bytes)")
 
     // Mint NFT with Metaplex Core
     console.log("⚡ Minting NFT with Core...")
     const mintResult = await mintNFTWithCore(
       walletAddress,
-      minimalMetadata,
+      enhancedMetadata,
       metadataUrl,
       creatorKeypair,
       creatorUmi,
