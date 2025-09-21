@@ -295,10 +295,6 @@ export default async function handler(req, res) {
           value: collectionNumber,
         },
         {
-          trait_type: "Platform",
-          value: "WordPress",
-        },
-        {
           trait_type: "Creator",
           value: "x1xo.com",
         },
@@ -306,25 +302,7 @@ export default async function handler(req, res) {
           trait_type: "Website",
           value: "https://x1xo.com",
         },
-        {
-          trait_type: "Product Page",
-          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-        },
-        {
-          trait_type: "Minted Date",
-          value: new Date().toISOString().split("T")[0],
-        },
       ],
-      properties: {
-        category: "image",
-        creators: [
-          {
-            address: creatorKeypair.publicKey.toString(),
-            verified: true,
-            share: 100,
-          },
-        ],
-      },
     }
 
     console.log("📋 Enhanced metadata with traits:", JSON.stringify(enhancedMetadata, null, 2))
