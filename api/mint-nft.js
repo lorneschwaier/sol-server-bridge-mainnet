@@ -132,24 +132,29 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
 
     console.log("📡 Submitting transaction to Solana...")
     const result = await createInstruction.sendAndConfirm(creatorUmi, {
-      confirm: { commitment: "finalized" },
+      confirm: { commitment: "confirmed" }, // Changed from finalized to confirmed for faster response
       send: { skipPreflight: false },
     })
+
+    console.log("✅ NFT creation transaction confirmed:", result.signature)
 
     let immutableSignature = null
 
     if (makeImmutable) {
       console.log("🔒 Making NFT permanently immutable...")
       try {
-        await new Promise((resolve) => setTimeout(resolve, 3000)) // Wait for creation to settle
+        await new Promise((resolve) => setTimeout(resolve, 2000)) // Reduced from 3000ms
 
         const immutableResult = await updateV1(creatorUmi, {
           asset: asset.publicKey,
           newUpdateAuthority: null, // Remove update authority completely
-        }).sendAndConfirm(creatorUmi)
+        }).sendAndConfirm(creatorUmi, {
+          confirm: { commitment: "confirmed" },
+        })
 
         immutableSignature = immutableResult.signature
         console.log("✅ NFT is now PERMANENTLY IMMUTABLE - no one can ever change it")
+        console.log("🔒 Immutable transaction:", immutableSignature)
       } catch (immutableError) {
         console.log("⚠️ Could not remove update authority, but NFT is still minted:", immutableError.message)
       }
@@ -162,15 +167,17 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
     console.log("📝 Transaction signature:", result.signature)
 
     console.log("✅ Core NFT minted, waiting for indexing...")
-    await new Promise((resolve) => setTimeout(resolve, 30000))
+    await new Promise((resolve) => setTimeout(resolve, 10000)) // Reduced from 30000ms
 
     console.log("🔄 Checking if asset is indexed...")
     try {
       const umi = createUmi(RPC_ENDPOINTS[0]).use(mplCore())
       const fetchedAsset = await fetchAsset(umi, asset.publicKey)
       console.log("✅ Asset confirmed indexed:", fetchedAsset.publicKey)
+      console.log("📋 Asset name:", fetchedAsset.name)
+      console.log("👤 Asset owner:", fetchedAsset.owner)
     } catch (indexError) {
-      console.log("⚠️ Asset not yet indexed, may take more time to appear in wallets")
+      console.log("⚠️ Asset not yet indexed, may take more time to appear in wallets:", indexError.message)
     }
 
     const explorerUrl = `https://explorer.solana.com/address/${asset.publicKey}${
@@ -192,10 +199,16 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
     }
   } catch (error) {
     console.error("❌ Core minting failed:", error)
+    console.error("❌ Error details:", {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    })
     return {
       success: false,
       error: error.message,
       method: "core",
+      errorDetails: error.stack,
     }
   }
 }
