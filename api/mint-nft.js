@@ -470,7 +470,13 @@ export default async function handler(req, res) {
         files: [
           {
             uri: finalImageUrl,
-            type: finalImageUrl.includes(".png") ? "image/png" : "image/jpeg",
+            type: finalImageUrl.includes(".webp")
+              ? "image/webp"
+              : finalImageUrl.includes(".png")
+                ? "image/png"
+                : finalImageUrl.includes(".gif")
+                  ? "image/gif"
+                  : "image/jpeg",
           },
         ],
         category: "image",
