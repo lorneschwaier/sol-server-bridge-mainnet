@@ -442,9 +442,9 @@ export default async function handler(req, res) {
 
     // Step 1: Use WordPress media URL directly
     const finalImageUrl = metadata.image // WordPress media URL like https://x1xo.com/wp-content/uploads/...
-    console.log("📸 Using WordPress media URL:", finalImageUrl)
+    console.log("📸 Using WordPress media URL directly:", finalImageUrl)
 
-    // Step 2: Create final metadata - ENHANCED FOR WALLET COMPATIBILITY
+    // Step 2: Create final metadata - BALANCED FOR ALL PLATFORMS
     let collectionNumber = Math.floor(Math.random() * 10000) + 1 // Default fallback
 
     // Try to extract number from the NFT name (e.g., "Matrix NFT Test 17" -> 17)
@@ -460,37 +460,12 @@ export default async function handler(req, res) {
       name: metadata.name || "WordPress NFT",
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl,
-      external_url: `https://explorer.solana.com/address/PLACEHOLDER_MINT_ADDRESS${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`,
+      external_url: "https://x1xo.com", // Temporary, will be updated to Solana Explorer URL
 
-      website: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`, // Use actual product URL instead of just domain
-
-      seller_fee_basis_points: 300,
-      is_mutable: !makeImmutable,
-      properties: {
-        files: [
-          {
-            uri: finalImageUrl,
-            type: finalImageUrl.includes(".webp")
-              ? "image/webp"
-              : finalImageUrl.includes(".png")
-                ? "image/png"
-                : finalImageUrl.includes(".gif")
-                  ? "image/gif"
-                  : "image/jpeg",
-          },
-        ],
-        category: "image",
-        creators: [
-          {
-            address: creatorKeypair.publicKey.toString(),
-            verified: true,
-            share: 100,
-          },
-        ],
-      },
+      // Keep essential attributes for Magic Eden but remove bloat for Phantom
       attributes: [
         { trait_type: "Collection", value: String(collectionNumber) },
-        { trait_type: "Platform", value: "WordPress" },
+        { trait_type: "Platform", value: "WP" }, // Shortened
         { trait_type: "Creator", value: "x1xo.com" },
         { trait_type: "Website", value: "x1xo.com" },
         {
@@ -499,13 +474,9 @@ export default async function handler(req, res) {
             ? metadata.product_url.replace("https://", "")
             : `x1xo.com/product/${metadata.product_slug || "nft"}`,
         },
-        { trait_type: "Minted", value: new Date().toISOString().split("T")[0] }, // Clean date format YYYY-MM-DD
+        { trait_type: "Minted", value: new Date().toISOString().split("T")[0] },
         { trait_type: "Tx", value: "" }, // Will be filled after minting
       ],
-      collection: {
-        name: "Xeno AI NFT Collection",
-        family: "Xeno AI",
-      },
     }
 
     console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
@@ -545,10 +516,11 @@ export default async function handler(req, res) {
       external_url: `https://explorer.solana.com/address/${mintResult.mintAddress}${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`,
     }
 
+    // Update transaction in attributes
+    updatedMetadata.attributes.find((attr) => attr.trait_type === "Tx").value = mintResult.transactionSignature
+
     console.log("📤 Updating metadata with Solana Explorer URL...")
     const finalUploadResult = await uploadToPinata(updatedMetadata)
-
-    finalMetadata.attributes.find((attr) => attr.trait_type === "Tx").value = mintResult.transactionSignature
 
     console.log("🎉 === NFT MINTING COMPLETE (CORE) ===")
 
