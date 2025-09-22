@@ -317,7 +317,7 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
 
     console.log("📡 Submitting transaction to Solana...")
     const result = await createInstruction.sendAndConfirm(creatorUmi, {
-      confirm: { commitment: "confirmed" },
+      confirm: { commitment: "finalized" },
       send: { skipPreflight: false },
     })
 
@@ -326,7 +326,7 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
     console.log("📝 Transaction signature:", result.signature)
 
     console.log("✅ Core NFT minted, waiting for indexing...")
-    await new Promise((resolve) => setTimeout(resolve, 8000))
+    await new Promise((resolve) => setTimeout(resolve, 15000))
 
     console.log("🔄 Checking if asset is indexed...")
     try {
@@ -451,7 +451,7 @@ export default async function handler(req, res) {
       name: metadata.name || "WordPress NFT",
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl,
-      external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`, // Fixed external_url for clickable links in Solana Explorer
+      external_url: `https://explorer.solana.com/address/PLACEHOLDER_MINT_ADDRESS${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`,
 
       website: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`, // Use actual product URL instead of just domain
 
@@ -525,6 +525,14 @@ export default async function handler(req, res) {
       })
     }
 
+    const updatedMetadata = {
+      ...finalMetadata,
+      external_url: `https://explorer.solana.com/address/${mintResult.mintAddress}${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`,
+    }
+
+    console.log("📤 Updating metadata with Solana Explorer URL...")
+    const finalUploadResult = await uploadToPinata(updatedMetadata)
+
     finalMetadata.attributes.find((attr) => attr.trait_type === "Tx").value = mintResult.transactionSignature
 
     console.log("🎉 === NFT MINTING COMPLETE (CORE) ===")
@@ -533,7 +541,7 @@ export default async function handler(req, res) {
       success: true,
       mintAddress: mintResult.mintAddress,
       transactionSignature: mintResult.transactionSignature,
-      metadataUrl: uploadResult.url,
+      metadataUrl: finalUploadResult.url,
       imageUrl: finalImageUrl,
       explorerUrl: mintResult.explorerUrl,
       network: SOLANA_NETWORK,
