@@ -445,7 +445,16 @@ export default async function handler(req, res) {
     console.log("📸 Using WordPress media URL:", finalImageUrl)
 
     // Step 2: Create final metadata - ENHANCED FOR WALLET COMPATIBILITY
-    const collectionNumber = Math.floor(Math.random() * 10000) + 1 // Generate random collection number 1-10000
+    let collectionNumber = Math.floor(Math.random() * 10000) + 1 // Default fallback
+
+    // Try to extract number from the NFT name (e.g., "Matrix NFT Test 17" -> 17)
+    if (metadata.name) {
+      const nameMatch = metadata.name.match(/(\d+)(?!.*\d)/) // Get the last number in the name
+      if (nameMatch) {
+        collectionNumber = Number.parseInt(nameMatch[1])
+        console.log(`🔢 Extracted collection number ${collectionNumber} from NFT name: ${metadata.name}`)
+      }
+    }
 
     const finalMetadata = {
       name: metadata.name || "WordPress NFT",
@@ -474,7 +483,7 @@ export default async function handler(req, res) {
         ],
       },
       attributes: [
-        { trait_type: "Collection", value: String(metadata.collection_number || collectionNumber) }, // Use collection number from admin or generate random
+        { trait_type: "Collection", value: String(collectionNumber) },
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo.com" },
         { trait_type: "Website", value: "x1xo.com" },
@@ -551,7 +560,7 @@ export default async function handler(req, res) {
       message: mintResult.isImmutable
         ? "NFT minted and permanently locked - no one can ever change it"
         : "NFT minted as updatable - creator retains ability to modify metadata",
-      collectionNumber: mintResult.collectionNumber,
+      collectionNumber: collectionNumber,
     })
   } catch (error) {
     console.error("❌ Mint NFT error:", error)
