@@ -344,7 +344,16 @@ export default async function handler(req, res) {
       symbol: "XENO", // This symbol should now appear on Solana Explorer
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl,
+
+      // Keep this for marketplaces like Magic Eden
       external_url: "https://x1xo.com",
+
+      extensions: {
+        website: "https://x1xo.com",
+        // optional but nice to have:
+        twitter: "https://x.com/x1xoai",
+      },
+
       seller_fee_basis_points: 500, // 5% royalty for Magic Eden
       attributes: [
         { trait_type: "Product ID", value: String(metadata.product_id || "unknown") },
