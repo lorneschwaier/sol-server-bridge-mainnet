@@ -4,7 +4,7 @@ globalThis.Buffer = Buffer
 
 import { Connection, PublicKey, Keypair, clusterApiUrl } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
-import { createV1, mplCore } from "@metaplex-foundation/mpl-core"
+import { createV1 } from "@metaplex-foundation/mpl-core"
 import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
 import axios from "axios"
@@ -41,7 +41,7 @@ if (CREATOR_PRIVATE_KEY) {
     creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
     console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
 
-    const umi = createUmi(SOLANA_RPC_URL).use(mplCore())
+    const umi = createUmi(SOLANA_RPC_URL)
     const umiKeypair = fromWeb3JsKeypair(creatorKeypair)
     creatorUmi = umi.use(keypairIdentity(umiKeypair))
 
@@ -196,26 +196,11 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
 
     console.log("⚡ Creating NFT with Metaplex Core...")
 
-    // Create the NFT using Metaplex Core with proper symbol and creator
     const createInstruction = createV1(creatorUmi, {
       asset,
       name: metadata.name || "Unnamed NFT",
       uri: metadataUrl,
       owner: publicKey(walletAddress),
-      symbol: metadata.symbol || "XENO",
-      plugins: [
-        {
-          type: "Royalties",
-          basisPoints: 500, // 5% royalty
-          creators: [
-            {
-              address: publicKey(creatorKeypair.publicKey.toString()),
-              percentage: 100,
-            },
-          ],
-          ruleSet: "None",
-        },
-      ],
     })
 
     // Execute the transaction
