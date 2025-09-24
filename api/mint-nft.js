@@ -2,7 +2,7 @@
 import { Buffer } from "buffer"
 globalThis.Buffer = Buffer
 
-import { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } from "@solana/web3.js"
+import { Connection, PublicKey, Keypair, clusterApiUrl } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
 import { createV1, mplCore } from "@metaplex-foundation/mpl-core"
 import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
@@ -188,24 +188,7 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     console.log("📋 Metadata URL:", metadataUrl)
     console.log("🏷️ NFT Name:", metadata.name)
 
-    // Check creator wallet balance
-    const balance = await connection.getBalance(creatorKeypair.publicKey)
-    console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
-
-    console.log("[v0] Debug - Raw balance in lamports:", balance)
-    console.log("[v0] Debug - Balance in SOL:", balance / LAMPORTS_PER_SOL)
-    console.log("[v0] Debug - Minimum required lamports:", 0.005 * LAMPORTS_PER_SOL)
-    console.log("[v0] Debug - Balance check result:", balance >= 0.005 * LAMPORTS_PER_SOL)
-    console.log("[v0] Debug - Creator wallet address:", creatorKeypair.publicKey.toString())
-
-    if (balance < 0.005 * LAMPORTS_PER_SOL) {
-      console.error("[v0] Balance check failed - balance:", balance, "required:", 0.005 * LAMPORTS_PER_SOL)
-      throw new Error(
-        `Insufficient SOL in creator wallet. Balance: ${(balance / LAMPORTS_PER_SOL).toFixed(6)} SOL. Please fund the wallet.`,
-      )
-    }
-
-    console.log("[v0] Balance check PASSED - proceeding with mint")
+    console.log("💰 Skipping balance check - proceeding with mint")
 
     // Generate asset signer
     const asset = generateSigner(creatorUmi)
