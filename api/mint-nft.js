@@ -203,22 +203,25 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl, umi
 
     try {
       const balanceFinalized = await umi.rpc.getBalance(umi.identity.publicKey, { commitment: "finalized" })
-      console.log("💰 Balance (finalized):", balanceFinalized / LAMPORTS_PER_SOL, "SOL")
+      console.log("💰 Balance (finalized):", Number(balanceFinalized.basisPoints) / LAMPORTS_PER_SOL, "SOL")
 
       const balanceConfirmed = await umi.rpc.getBalance(umi.identity.publicKey, { commitment: "confirmed" })
-      console.log("💰 Balance (confirmed):", balanceConfirmed / LAMPORTS_PER_SOL, "SOL")
+      console.log("💰 Balance (confirmed):", Number(balanceConfirmed.basisPoints) / LAMPORTS_PER_SOL, "SOL")
 
       const balanceProcessed = await umi.rpc.getBalance(umi.identity.publicKey, { commitment: "processed" })
-      console.log("💰 Balance (processed):", balanceProcessed / LAMPORTS_PER_SOL, "SOL")
+      console.log("💰 Balance (processed):", Number(balanceProcessed.basisPoints) / LAMPORTS_PER_SOL, "SOL")
 
       // Use the highest balance found
-      const balance = Math.max(balanceFinalized, balanceConfirmed, balanceProcessed)
+      const balance = Math.max(
+        Number(balanceFinalized.basisPoints),
+        Number(balanceConfirmed.basisPoints),
+        Number(balanceProcessed.basisPoints),
+      )
       console.log("💰 Using highest balance found:", balance / LAMPORTS_PER_SOL, "SOL")
 
-      // Also check account info for more details
-      const accountInfo = await umi.rpc.getAccountInfo(umi.identity.publicKey)
-      if (accountInfo) {
-        console.log("📊 Account info - lamports:", accountInfo.lamports)
+      const accountInfo = await umi.rpc.getAccount(umi.identity.publicKey)
+      if (accountInfo.exists) {
+        console.log("📊 Account info - lamports:", Number(accountInfo.lamports))
         console.log("📊 Account info - owner:", accountInfo.owner.toString())
         console.log("📊 Account info - executable:", accountInfo.executable)
       } else {
@@ -227,7 +230,7 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl, umi
 
       if (balance < 0.01 * LAMPORTS_PER_SOL) {
         throw new Error(
-          `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet: ${umi.identity.publicKey.toString()}.`,
+          `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet: ${umi.identity.publicKey.toString()}. RPC: ${umi.rpc.endpoint}`,
         )
       }
 
