@@ -1,11 +1,11 @@
 // Buffer polyfill fix for Vercel ES modules
-import { Buffer } from 'buffer';
-globalThis.Buffer = Buffer;
+import { Buffer } from "buffer"
+globalThis.Buffer = Buffer
 
 import { Connection, PublicKey, Keypair, clusterApiUrl, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
-import { createV1, mplCore, ruleSet } from "@metaplex-foundation/mpl-core"
-import { keypairIdentity, generateSigner, publicKey, some, none } from "@metaplex-foundation/umi"
+import { createV1, mplCore } from "@metaplex-foundation/mpl-core"
+import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
 import axios from "axios"
 import bs58 from "bs58"
@@ -63,9 +63,10 @@ async function uploadImageToPinata(imageUrl) {
     // Try fetch instead of axios to bypass 403 issues
     const imageResponse = await fetch(imageUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Accept": "image/*,*/*",
-        "Referer": "https://x1xo.com/",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        Accept: "image/*,*/*",
+        Referer: "https://x1xo.com/",
       },
     })
 
@@ -190,10 +191,11 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     // Check creator wallet balance
     const balance = await connection.getBalance(creatorKeypair.publicKey)
     console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
+    console.log("🔑 Creator wallet address being checked:", creatorKeypair.publicKey.toString())
 
     if (balance < 0.01 * LAMPORTS_PER_SOL) {
       throw new Error(
-        `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet.`,
+        `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet: ${creatorKeypair.publicKey.toString()}`,
       )
     }
 
@@ -289,7 +291,7 @@ export default async function handler(req, res) {
     // Step 1: Upload image to IPFS - CONFIGURABLE OPTION
     let finalImageUrl = metadata.image
     const useIPFS = metadata.use_ipfs || false // Add this option from WordPress
-    
+
     if (metadata.image && !metadata.image.includes("ipfs") && useIPFS) {
       console.log("📸 Step 1: Uploading image to IPFS (user chose decentralized storage)...")
       const imageUploadResult = await uploadImageToPinata(metadata.image)
