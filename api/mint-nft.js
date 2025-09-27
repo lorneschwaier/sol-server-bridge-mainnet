@@ -12,16 +12,7 @@ import bs58 from "bs58"
 import FormData from "form-data"
 
 // Environment variables
-const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
-const SOLANA_RPC_URL =
-  process.env.SOLANA_RPC_URL ||
-  (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
-const PINATA_API_KEY = process.env.PINATA_API_KEY
-const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
 const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY
-
-// Initialize Solana connection
-const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
 // Initialize creator keypair and UMI
 let creatorKeypair = null
@@ -41,7 +32,7 @@ if (CREATOR_PRIVATE_KEY) {
     creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
     console.log("✅ Creator wallet loaded:", creatorKeypair.publicKey.toString())
 
-    const umi = createUmi(SOLANA_RPC_URL).use(mplCore())
+    const umi = createUmi(clusterApiUrl("mainnet-beta")).use(mplCore())
     const umiKeypair = fromWeb3JsKeypair(creatorKeypair)
     creatorUmi = umi.use(keypairIdentity(umiKeypair))
 
@@ -54,6 +45,9 @@ if (CREATOR_PRIVATE_KEY) {
 // Upload image to Pinata IPFS
 async function uploadImageToPinata(imageUrl) {
   try {
+    const PINATA_API_KEY = process.env.PINATA_API_KEY
+    const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
+
     if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
       throw new Error("Pinata API credentials not configured")
     }
@@ -134,6 +128,9 @@ async function uploadImageToPinata(imageUrl) {
 // Upload metadata to Pinata
 async function uploadToPinata(metadata) {
   try {
+    const PINATA_API_KEY = process.env.PINATA_API_KEY
+    const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
+
     if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
       throw new Error("Pinata API credentials not configured")
     }
@@ -177,9 +174,9 @@ async function uploadToPinata(metadata) {
 }
 
 // Real NFT Minting with Metaplex Core
-async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
+async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl, umi) {
   try {
-    if (!creatorUmi) {
+    if (!umi) {
       throw new Error("Metaplex Core UMI not initialized - creator private key required")
     }
 
@@ -189,13 +186,12 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     console.log("🏷️ NFT Name:", metadata.name)
 
     console.log("🔍 === DEBUGGING WALLET BALANCE ISSUE ===")
-    console.log("🌐 RPC URL:", SOLANA_RPC_URL)
-    console.log("🔑 Creator wallet address:", creatorKeypair.publicKey.toString())
+    console.log("🔑 Creator wallet address:", umi.identity.publicKey.toString())
 
     // Test RPC connection first
     try {
       console.log("🔌 Testing RPC connection...")
-      const slot = await connection.getSlot()
+      const slot = await umi.rpc.getSlot()
       console.log("✅ RPC connection working, current slot:", slot)
     } catch (rpcError) {
       console.error("❌ RPC connection failed:", rpcError.message)
@@ -206,13 +202,13 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     console.log("💰 Checking wallet balance with different commitment levels...")
 
     try {
-      const balanceFinalized = await connection.getBalance(creatorKeypair.publicKey, "finalized")
+      const balanceFinalized = await umi.rpc.getBalance(umi.identity.publicKey, { commitment: "finalized" })
       console.log("💰 Balance (finalized):", balanceFinalized / LAMPORTS_PER_SOL, "SOL")
 
-      const balanceConfirmed = await connection.getBalance(creatorKeypair.publicKey, "confirmed")
+      const balanceConfirmed = await umi.rpc.getBalance(umi.identity.publicKey, { commitment: "confirmed" })
       console.log("💰 Balance (confirmed):", balanceConfirmed / LAMPORTS_PER_SOL, "SOL")
 
-      const balanceProcessed = await connection.getBalance(creatorKeypair.publicKey, "processed")
+      const balanceProcessed = await umi.rpc.getBalance(umi.identity.publicKey, { commitment: "processed" })
       console.log("💰 Balance (processed):", balanceProcessed / LAMPORTS_PER_SOL, "SOL")
 
       // Use the highest balance found
@@ -220,7 +216,7 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
       console.log("💰 Using highest balance found:", balance / LAMPORTS_PER_SOL, "SOL")
 
       // Also check account info for more details
-      const accountInfo = await connection.getAccountInfo(creatorKeypair.publicKey)
+      const accountInfo = await umi.rpc.getAccountInfo(umi.identity.publicKey)
       if (accountInfo) {
         console.log("📊 Account info - lamports:", accountInfo.lamports)
         console.log("📊 Account info - owner:", accountInfo.owner.toString())
@@ -231,7 +227,7 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
 
       if (balance < 0.01 * LAMPORTS_PER_SOL) {
         throw new Error(
-          `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet: ${creatorKeypair.publicKey.toString()}. RPC: ${SOLANA_RPC_URL}`,
+          `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet: ${umi.identity.publicKey.toString()}.`,
         )
       }
 
@@ -242,13 +238,13 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     }
 
     // Generate asset signer
-    const asset = generateSigner(creatorUmi)
+    const asset = generateSigner(umi)
     console.log("🔑 Generated asset address:", asset.publicKey)
 
     console.log("⚡ Creating NFT with Metaplex Core...")
 
     // Create the NFT using Metaplex Core - SIMPLE VERSION WITHOUT PLUGINS
-    const createInstruction = createV1(creatorUmi, {
+    const createInstruction = createV1(umi, {
       asset,
       name: metadata.name || "Unnamed NFT",
       uri: metadataUrl,
@@ -258,7 +254,7 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
 
     // Execute the transaction
     console.log("📡 Submitting transaction to Solana...")
-    const result = await createInstruction.sendAndConfirm(creatorUmi, {
+    const result = await createInstruction.sendAndConfirm(umi, {
       confirm: { commitment: "confirmed" },
       send: { skipPreflight: false },
     })
@@ -268,7 +264,7 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     console.log("📝 Transaction signature:", result.signature)
 
     const explorerUrl = `https://explorer.solana.com/address/${asset.publicKey}${
-      SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""
+      umi.cluster === "devnet" ? "?cluster=devnet" : ""
     }`
 
     return {
@@ -278,7 +274,7 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
       metadataUrl: metadataUrl,
       explorerUrl: explorerUrl,
       method: "metaplex_core",
-      network: SOLANA_NETWORK,
+      network: umi.cluster,
     }
   } catch (error) {
     console.error("❌ Metaplex Core minting failed:", error)
@@ -307,7 +303,20 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { walletAddress, metadata } = req.body
+    const { walletAddress, metadata, network } = req.body
+    const SOLANA_NETWORK = network || process.env.SOLANA_NETWORK || "mainnet-beta"
+    const SOLANA_RPC_URL =
+      SOLANA_NETWORK === "mainnet-beta"
+        ? "https://api.mainnet-beta.solana.com"
+        : `https://api.${SOLANA_NETWORK}.solana.com`
+
+    console.log("🌐 Using network:", SOLANA_NETWORK)
+    console.log("🌐 Using RPC URL:", SOLANA_RPC_URL)
+
+    const connection = new Connection(SOLANA_RPC_URL, "confirmed")
+    const umi = createUmi(SOLANA_RPC_URL)
+      .use(mplCore())
+      .use(keypairIdentity(fromWeb3JsKeypair(creatorKeypair)))
 
     console.log("🎨 === REAL NFT MINTING REQUEST (METAPLEX CORE) ===")
     console.log("👤 Wallet:", walletAddress)
@@ -399,7 +408,7 @@ export default async function handler(req, res) {
 
     // Step 4: Mint NFT with Metaplex Core
     console.log("⚡ Step 3: Minting NFT with Metaplex Core...")
-    const mintResult = await mintNFTWithMetaplexCore(walletAddress, finalMetadata, uploadResult.url)
+    const mintResult = await mintNFTWithMetaplexCore(walletAddress, finalMetadata, uploadResult.url, umi)
 
     if (!mintResult.success) {
       return res.status(500).json({
