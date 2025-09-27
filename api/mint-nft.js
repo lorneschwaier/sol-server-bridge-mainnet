@@ -188,15 +188,57 @@ async function mintNFTWithMetaplexCore(walletAddress, metadata, metadataUrl) {
     console.log("📋 Metadata URL:", metadataUrl)
     console.log("🏷️ NFT Name:", metadata.name)
 
-    // Check creator wallet balance
-    const balance = await connection.getBalance(creatorKeypair.publicKey)
-    console.log("💰 Creator wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
-    console.log("🔑 Creator wallet address being checked:", creatorKeypair.publicKey.toString())
+    console.log("🔍 === DEBUGGING WALLET BALANCE ISSUE ===")
+    console.log("🌐 RPC URL:", SOLANA_RPC_URL)
+    console.log("🔑 Creator wallet address:", creatorKeypair.publicKey.toString())
 
-    if (balance < 0.01 * LAMPORTS_PER_SOL) {
-      throw new Error(
-        `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet: ${creatorKeypair.publicKey.toString()}`,
-      )
+    // Test RPC connection first
+    try {
+      console.log("🔌 Testing RPC connection...")
+      const slot = await connection.getSlot()
+      console.log("✅ RPC connection working, current slot:", slot)
+    } catch (rpcError) {
+      console.error("❌ RPC connection failed:", rpcError.message)
+      throw new Error(`RPC connection failed: ${rpcError.message}`)
+    }
+
+    // Try multiple balance checks with different commitment levels
+    console.log("💰 Checking wallet balance with different commitment levels...")
+
+    try {
+      const balanceFinalized = await connection.getBalance(creatorKeypair.publicKey, "finalized")
+      console.log("💰 Balance (finalized):", balanceFinalized / LAMPORTS_PER_SOL, "SOL")
+
+      const balanceConfirmed = await connection.getBalance(creatorKeypair.publicKey, "confirmed")
+      console.log("💰 Balance (confirmed):", balanceConfirmed / LAMPORTS_PER_SOL, "SOL")
+
+      const balanceProcessed = await connection.getBalance(creatorKeypair.publicKey, "processed")
+      console.log("💰 Balance (processed):", balanceProcessed / LAMPORTS_PER_SOL, "SOL")
+
+      // Use the highest balance found
+      const balance = Math.max(balanceFinalized, balanceConfirmed, balanceProcessed)
+      console.log("💰 Using highest balance found:", balance / LAMPORTS_PER_SOL, "SOL")
+
+      // Also check account info for more details
+      const accountInfo = await connection.getAccountInfo(creatorKeypair.publicKey)
+      if (accountInfo) {
+        console.log("📊 Account info - lamports:", accountInfo.lamports)
+        console.log("📊 Account info - owner:", accountInfo.owner.toString())
+        console.log("📊 Account info - executable:", accountInfo.executable)
+      } else {
+        console.log("❌ Account info not found - wallet might not exist on chain")
+      }
+
+      if (balance < 0.01 * LAMPORTS_PER_SOL) {
+        throw new Error(
+          `Insufficient SOL in creator wallet. Balance: ${balance / LAMPORTS_PER_SOL} SOL. Please fund the wallet: ${creatorKeypair.publicKey.toString()}. RPC: ${SOLANA_RPC_URL}`,
+        )
+      }
+
+      console.log("✅ Wallet has sufficient balance:", balance / LAMPORTS_PER_SOL, "SOL")
+    } catch (balanceError) {
+      console.error("❌ Balance check failed:", balanceError.message)
+      throw new Error(`Balance check failed: ${balanceError.message}`)
     }
 
     // Generate asset signer
