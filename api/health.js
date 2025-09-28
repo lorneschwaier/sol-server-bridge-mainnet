@@ -1,4 +1,9 @@
 export default async function handler(req, res) {
+  if (!res || typeof res.setHeader !== "function") {
+    console.log("[v0] Skipping execution in preview environment - this file is meant for Vercel deployment")
+    return
+  }
+
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
