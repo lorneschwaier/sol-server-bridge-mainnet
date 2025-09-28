@@ -4,7 +4,7 @@ globalThis.Buffer = Buffer
 
 import { Connection, PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
-import { create, mplCore, ruleSet, fetchAsset } from "@metaplex-foundation/mpl-core" // Added fetchAsset, updateV1, revokePluginAuthorityV1
+import { create, mplCore, fetchAsset } from "@metaplex-foundation/mpl-core" // Added fetchAsset, updateV1, revokePluginAuthorityV1
 import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
 import axios from "axios"
@@ -300,21 +300,6 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
       name: metadata.name || "Matrix NFT",
       uri: metadataUrl,
       owner: publicKey(walletAddress),
-
-      // Simplified plugins - Remove complex royalty setup that might cause issues
-      plugins: [
-        {
-          type: "Royalties",
-          basisPoints: 300, // 3%
-          creators: [
-            {
-              address: creatorUmi.identity.publicKey,
-              percentage: 100,
-            },
-          ],
-          ruleSet: ruleSet("None"),
-        },
-      ],
     })
 
     console.log("📡 Submitting transaction to Solana...")
@@ -479,6 +464,7 @@ export default async function handler(req, res) {
       symbol: "XENO", // Added XENO symbol back - required by Phantom wallet
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl, // WordPress media URL
+      animation_url: "", // Added missing animation_url field required by Phantom
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`, // Product page URL, not explorer
 
       seller_fee_basis_points: 300,
@@ -508,6 +494,7 @@ export default async function handler(req, res) {
         { trait_type: "Collection", value: `#${collectionNumber}` },
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo.com" },
+        { trait_type: "Transaction", value: "pending" }, // Placeholder - will be updated after mint
         {
           trait_type: "Website",
           value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
@@ -552,28 +539,8 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 4: Update metadata with transaction address and re-upload
-    console.log("📝 Step 4: Updating metadata with transaction address...")
-    const updatedMetadata = {
-      ...finalMetadata,
-      attributes: [
-        { trait_type: "Collection", value: `#${collectionNumber}` },
-        { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Creator", value: "x1xo.com" },
-        { trait_type: "Transaction", value: mintResult.transactionSignature }, // NFT transaction address
-        {
-          trait_type: "Website",
-          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-        },
-      ],
-    }
-
-    // Upload updated metadata with transaction address
-    const updatedUploadResult = await uploadToPinata(updatedMetadata)
-
-    if (updatedUploadResult.success) {
-      console.log("✅ Updated metadata with transaction address uploaded")
-    }
+    // Step 4: SKIP updating metadata to avoid URI mismatch
+    console.log("📝 Step 4: Keeping original metadata to ensure URI consistency")
 
     console.log("🎉 === NFT MINTING COMPLETE (CORE) ===")
 
@@ -581,14 +548,14 @@ export default async function handler(req, res) {
       success: true,
       mintAddress: mintResult.mintAddress,
       transactionSignature: mintResult.transactionSignature,
-      metadataUrl: updatedUploadResult.url,
-      imageUrl: finalImageUrl, // Return WordPress media URL
+      metadataUrl: uploadResult.url, // Single consistent URL
+      imageUrl: finalImageUrl,
       explorerUrl: mintResult.explorerUrl,
       network: SOLANA_NETWORK,
       method: "core",
       isImmutable: mintResult.isImmutable,
       collectionNumber: collectionNumber,
-      message: "NFT minted successfully! It may take 5-10 minutes to appear in Phantom wallet due to indexing delays.",
+      message: "NFT minted successfully! Check Phantom wallet in 15-30 minutes.",
     })
   } catch (error) {
     console.error("❌ Mint NFT error:", error)
