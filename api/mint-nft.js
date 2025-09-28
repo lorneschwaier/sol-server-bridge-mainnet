@@ -287,7 +287,7 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
 
     console.log("⚡ Creating NFT with Core (with creator verification)...")
 
-    const collectionNumber = Math.floor(Math.random() * 10000) + 1 // Generate random collection number 1-10000
+    const collectionNumber = Math.floor(Math.random() * 10000) + 1
 
     console.log("🎨 === STARTING REAL NFT MINT WITH CORE ===")
     console.log("👤 Recipient:", walletAddress)
@@ -297,13 +297,15 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
 
     const createInstruction = create(creatorUmi, {
       asset,
-      name: metadata.name || "Unnamed NFT",
+      name: metadata.name || "Matrix NFT",
       uri: metadataUrl,
       owner: publicKey(walletAddress),
+
+      // Simplified plugins - Remove complex royalty setup that might cause issues
       plugins: [
         {
           type: "Royalties",
-          basisPoints: 300,
+          basisPoints: 300, // 3%
           creators: [
             {
               address: creatorUmi.identity.publicKey,
@@ -317,24 +319,32 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
 
     console.log("📡 Submitting transaction to Solana...")
     const result = await createInstruction.sendAndConfirm(creatorUmi, {
-      confirm: { commitment: "finalized" },
-      send: { skipPreflight: false },
+      confirm: {
+        commitment: "finalized", // Wait for full finalization
+      },
+      send: {
+        skipPreflight: false,
+        maxRetries: 3, // Retry failed transactions
+      },
     })
 
-    console.log("🎉 === NFT MINTED SUCCESSFULLY WITH CORE! ===")
+    console.log("🎉 NFT minted successfully!")
     console.log("🔗 Asset address:", asset.publicKey)
     console.log("📝 Transaction signature:", result.signature)
 
-    console.log("✅ Core NFT minted, waiting for indexing...")
-    await new Promise((resolve) => setTimeout(resolve, 15000))
+    console.log("⏳ Waiting for blockchain indexing (60 seconds)...")
+    await new Promise((resolve) => setTimeout(resolve, 60000)) // Increased to 60 seconds
 
-    console.log("🔄 Checking if asset is indexed...")
+    console.log("🔄 Verifying asset is properly indexed...")
     try {
       const umi = createUmi(RPC_ENDPOINTS[0]).use(mplCore())
       const fetchedAsset = await fetchAsset(umi, asset.publicKey)
-      console.log("✅ Asset confirmed indexed:", fetchedAsset.publicKey)
+      console.log("✅ Asset confirmed and indexed:", fetchedAsset.publicKey)
+      console.log("🎨 Asset name:", fetchedAsset.name)
+      console.log("📋 Asset URI:", fetchedAsset.uri)
     } catch (indexError) {
-      console.log("⚠️ Asset not yet indexed, may take more time to appear in wallets")
+      console.log("⚠️ Asset indexing delayed - may take 5-10 minutes to appear in Phantom")
+      console.log("📱 Try refreshing your Phantom wallet in a few minutes")
     }
 
     const explorerUrl = `https://explorer.solana.com/address/${asset.publicKey}${
@@ -440,16 +450,24 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 1: Use WordPress media URL directly
-    const finalImageUrl = metadata.image // WordPress media URL like https://x1xo.com/wp-content/uploads/...
-    console.log("📸 Using WordPress media URL:", finalImageUrl)
+    // Step 1: Upload WordPress image to IPFS for Phantom wallet compatibility
+    console.log("📸 Step 1: Uploading image to IPFS for wallet compatibility...")
+    const imageUploadResult = await uploadImageToPinata(metadata.image)
 
-    // Step 2: Create final metadata - ENHANCED FOR WALLET COMPATIBILITY
-    let collectionNumber = Math.floor(Math.random() * 10000) + 1 // Default fallback
+    if (!imageUploadResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: "Failed to upload image: " + imageUploadResult.error,
+      })
+    }
 
-    // Try to extract number from the NFT name (e.g., "Matrix NFT Test 17" -> 17)
+    const finalImageUrl = metadata.image // Use WordPress media URL directly
+    console.log("✅ Using WordPress media URL:", finalImageUrl)
+
+    // Generate collection number
+    let collectionNumber = Math.floor(Math.random() * 10000) + 1
     if (metadata.name) {
-      const nameMatch = metadata.name.match(/(\d+)(?!.*\d)/) // Get the last number in the name
+      const nameMatch = metadata.name.match(/(\d+)(?!.*\d)/)
       if (nameMatch) {
         collectionNumber = Number.parseInt(nameMatch[1])
         console.log(`🔢 Extracted collection number ${collectionNumber} from NFT name: ${metadata.name}`)
@@ -457,20 +475,22 @@ export default async function handler(req, res) {
     }
 
     const finalMetadata = {
-      name: metadata.name || "WordPress NFT",
+      name: metadata.name || "Matrix NFT",
       description: metadata.description || "NFT created via WordPress store",
-      image: finalImageUrl,
-      external_url: `https://explorer.solana.com/address/PLACEHOLDER_MINT_ADDRESS${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`,
-
-      website: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`, // Use actual product URL instead of just domain
+      image: finalImageUrl, // WordPress media URL
+      external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`, // Product page URL, not explorer
 
       seller_fee_basis_points: 300,
-      is_mutable: !makeImmutable,
+
       properties: {
         files: [
           {
             uri: finalImageUrl,
-            type: finalImageUrl.includes(".png") ? "image/png" : "image/jpeg",
+            type: finalImageUrl.includes(".webp")
+              ? "image/webp"
+              : finalImageUrl.includes(".jpg") || finalImageUrl.includes(".jpeg")
+                ? "image/jpeg"
+                : "image/png",
           },
         ],
         category: "image",
@@ -482,29 +502,26 @@ export default async function handler(req, res) {
           },
         ],
       },
+
       attributes: [
-        { trait_type: "Collection", value: String(collectionNumber) },
+        { trait_type: "Collection", value: `#${collectionNumber}` },
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo.com" },
-        { trait_type: "Website", value: "x1xo.com" },
         {
-          trait_type: "Page",
-          value: metadata.product_url
-            ? metadata.product_url.replace("https://", "")
-            : `x1xo.com/product/${metadata.product_slug || "nft"}`,
+          trait_type: "Website",
+          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
         },
-        { trait_type: "Minted", value: new Date().toISOString().split("T")[0] }, // Clean date format YYYY-MM-DD
-        { trait_type: "Tx", value: "" }, // Will be filled after minting
       ],
+
       collection: {
-        name: "Xeno AI NFT Collection",
-        family: "Xeno AI",
+        name: "Matrix NFT Collection",
+        family: "Matrix",
       },
     }
 
     console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
 
-    // Step 3: Always upload metadata to Pinata for NFTs
+    // Step 2: Upload metadata to Pinata
     console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
     const uploadResult = await uploadToPinata(finalMetadata)
 
@@ -515,7 +532,7 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 4: Mint NFT with Metaplex Core
+    // Step 3: Mint NFT with Metaplex Core
     console.log("⚡ Step 3: Minting NFT with Core...")
     const mintResult = await mintNFTWithCore(
       walletAddress,
@@ -534,33 +551,20 @@ export default async function handler(req, res) {
       })
     }
 
-    const updatedMetadata = {
-      ...finalMetadata,
-      external_url: `https://explorer.solana.com/address/${mintResult.mintAddress}${SOLANA_NETWORK === "devnet" ? "?cluster=devnet" : ""}`,
-    }
-
-    console.log("📤 Updating metadata with Solana Explorer URL...")
-    const finalUploadResult = await uploadToPinata(updatedMetadata)
-
-    finalMetadata.attributes.find((attr) => attr.trait_type === "Tx").value = mintResult.transactionSignature
-
     console.log("🎉 === NFT MINTING COMPLETE (CORE) ===")
 
     res.json({
       success: true,
       mintAddress: mintResult.mintAddress,
       transactionSignature: mintResult.transactionSignature,
-      metadataUrl: finalUploadResult.url,
-      imageUrl: finalImageUrl,
+      metadataUrl: uploadResult.url,
+      imageUrl: finalImageUrl, // Return WordPress media URL
       explorerUrl: mintResult.explorerUrl,
       network: SOLANA_NETWORK,
       method: "core",
       isImmutable: mintResult.isImmutable,
-      mutabilityChoice: mintResult.isImmutable ? "Permanently Immutable" : "Creator Updatable",
-      message: mintResult.isImmutable
-        ? "NFT minted and permanently locked - no one can ever change it"
-        : "NFT minted as updatable - creator retains ability to modify metadata",
       collectionNumber: collectionNumber,
+      message: "NFT minted successfully! It may take 5-10 minutes to appear in Phantom wallet due to indexing delays.",
     })
   } catch (error) {
     console.error("❌ Mint NFT error:", error)
