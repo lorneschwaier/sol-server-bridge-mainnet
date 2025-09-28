@@ -476,6 +476,7 @@ export default async function handler(req, res) {
 
     const finalMetadata = {
       name: metadata.name || "Matrix NFT",
+      symbol: "XENO", // Added XENO symbol back - required by Phantom wallet
       description: metadata.description || "NFT created via WordPress store",
       image: finalImageUrl, // WordPress media URL
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`, // Product page URL, not explorer
