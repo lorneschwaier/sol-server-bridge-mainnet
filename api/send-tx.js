@@ -1,4 +1,9 @@
 export default async function handler(req, res) {
+  if (!res || typeof res.setHeader !== "function") {
+    console.log("[v0] Skipping execution in preview environment - this file is meant for Vercel deployment")
+    return
+  }
+
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -20,12 +25,12 @@ export default async function handler(req, res) {
     if (!signedTx) {
       return res.status(400).json({
         success: false,
-        error: "Missing signedTx parameter",
+        error: "Missing signed transaction",
       })
     }
 
     // Dynamic imports
-    const { Connection, clusterApiUrl } = await import("@solana/web3.js")
+    const { Connection, clusterApiUrl, Transaction } = await import("@solana/web3.js")
 
     // Environment variables
     const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
@@ -33,18 +38,26 @@ export default async function handler(req, res) {
       process.env.SOLANA_RPC_URL ||
       (SOLANA_NETWORK === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : clusterApiUrl(SOLANA_NETWORK))
 
-    console.log("📡 Sending transaction to Solana...")
-
+    // Initialize connection
     const connection = new Connection(SOLANA_RPC_URL, "confirmed")
 
-    // Send the raw transaction
-    const signature = await connection.sendRawTransaction(Buffer.from(signedTx, "base64"), {
+    // Deserialize transaction
+    const transaction = Transaction.from(Buffer.from(signedTx, "base64"))
+
+    // Send transaction
+    const signature = await connection.sendRawTransaction(transaction.serialize(), {
       skipPreflight: false,
-      preflightCommitment: "processed",
-      maxRetries: 3,
+      preflightCommitment: "confirmed",
     })
 
-    console.log("✅ Transaction sent:", signature)
+    console.log("✅ Transaction sent successfully:", signature)
+
+    // Wait for confirmation
+    const confirmation = await connection.confirmTransaction(signature, "confirmed")
+
+    if (confirmation.value.err) {
+      throw new Error("Transaction failed: " + JSON.stringify(confirmation.value.err))
+    }
 
     res.status(200).json({
       success: true,
@@ -52,7 +65,7 @@ export default async function handler(req, res) {
       network: SOLANA_NETWORK,
     })
   } catch (error) {
-    console.error("❌ Transaction sending failed:", error)
+    console.error("❌ Send transaction error:", error)
     res.status(500).json({
       success: false,
       error: error.message,
