@@ -552,13 +552,36 @@ export default async function handler(req, res) {
       })
     }
 
+    // Step 4: Update metadata with transaction address and re-upload
+    console.log("📝 Step 4: Updating metadata with transaction address...")
+    const updatedMetadata = {
+      ...finalMetadata,
+      attributes: [
+        { trait_type: "Collection", value: `#${collectionNumber}` },
+        { trait_type: "Platform", value: "WordPress" },
+        { trait_type: "Creator", value: "x1xo.com" },
+        { trait_type: "Transaction", value: mintResult.transactionSignature }, // NFT transaction address
+        {
+          trait_type: "Website",
+          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+        },
+      ],
+    }
+
+    // Upload updated metadata with transaction address
+    const updatedUploadResult = await uploadToPinata(updatedMetadata)
+
+    if (updatedUploadResult.success) {
+      console.log("✅ Updated metadata with transaction address uploaded")
+    }
+
     console.log("🎉 === NFT MINTING COMPLETE (CORE) ===")
 
     res.json({
       success: true,
       mintAddress: mintResult.mintAddress,
       transactionSignature: mintResult.transactionSignature,
-      metadataUrl: uploadResult.url,
+      metadataUrl: updatedUploadResult.url,
       imageUrl: finalImageUrl, // Return WordPress media URL
       explorerUrl: mintResult.explorerUrl,
       network: SOLANA_NETWORK,
