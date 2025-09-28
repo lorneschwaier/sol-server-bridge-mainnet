@@ -4,7 +4,7 @@ globalThis.Buffer = Buffer
 
 import { Connection, PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
-import { create, mplCore, ruleSet, fetchAsset } from "@metaplex-foundation/mpl-core" // Added fetchAsset, updateV1, revokePluginAuthorityV1
+import { create, mplCore, fetchAsset } from "@metaplex-foundation/mpl-core" // Added fetchAsset, updateV1, revokePluginAuthorityV1
 import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
 import axios from "axios"
@@ -300,21 +300,6 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
       name: metadata.name || "Matrix NFT",
       uri: metadataUrl,
       owner: publicKey(walletAddress),
-
-      // Simplified plugins - Remove complex royalty setup that might cause issues
-      plugins: [
-        {
-          type: "Royalties",
-          basisPoints: 300, // 3%
-          creators: [
-            {
-              address: creatorUmi.identity.publicKey,
-              percentage: 100,
-            },
-          ],
-          ruleSet: ruleSet("None"),
-        },
-      ],
     })
 
     console.log("📡 Submitting transaction to Solana...")
@@ -476,22 +461,30 @@ export default async function handler(req, res) {
 
     const finalMetadata = {
       name: metadata.name || "Matrix NFT",
-      symbol: "XENO", // Added XENO symbol back - required by Phantom wallet
-      description: metadata.description || "NFT created via WordPress store",
+      symbol: "XENO", // Rich metadata has symbol
+      description: metadata.description || "Minted via WordPress store",
       image: finalImageUrl, // WordPress media URL
-      external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`, // Product page URL, not explorer
-
-      seller_fee_basis_points: 300,
-
+      external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+      seller_fee_basis_points: 500, // 5% royalty in off-chain metadata
+      attributes: [
+        { trait_type: "Product ID", value: metadata.product_id || collectionNumber.toString() },
+        { trait_type: "Platform", value: "WordPress" },
+        { trait_type: "Creator", value: "WordPress Store" },
+        { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
+        { trait_type: "Transaction", value: "PLACEHOLDER_TRANSACTION_ID" }, // Will be updated after mint
+      ],
       properties: {
         files: [
           {
             uri: finalImageUrl,
-            type: finalImageUrl.includes(".webp")
-              ? "image/webp"
-              : finalImageUrl.includes(".jpg") || finalImageUrl.includes(".jpeg")
+            type:
+              finalImageUrl.includes(".jpg") || finalImageUrl.includes(".jpeg")
                 ? "image/jpeg"
-                : "image/png",
+                : finalImageUrl.includes(".png")
+                  ? "image/png"
+                  : finalImageUrl.includes(".webp")
+                    ? "image/webp"
+                    : "image/jpeg",
           },
         ],
         category: "image",
@@ -502,22 +495,6 @@ export default async function handler(req, res) {
             share: 100,
           },
         ],
-      },
-
-      attributes: [
-        { trait_type: "Collection", value: `#${collectionNumber}` },
-        { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Creator", value: "x1xo.com" },
-        { trait_type: "Transaction", value: "pending" }, // Placeholder - will be updated after mint
-        {
-          trait_type: "Website",
-          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-        },
-      ],
-
-      collection: {
-        name: "Matrix NFT Collection",
-        family: "Matrix",
       },
     }
 
@@ -538,7 +515,7 @@ export default async function handler(req, res) {
     console.log("⚡ Step 3: Minting NFT with Core...")
     const mintResult = await mintNFTWithCore(
       walletAddress,
-      finalMetadata,
+      { name: metadata.name || "Matrix NFT" }, // Simple metadata for on-chain
       uploadResult.url,
       creatorKeypair,
       creatorUmi,
@@ -553,31 +530,16 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 4: Update metadata with transaction address and re-upload to same CID
-    console.log("📝 Step 4: Updating metadata with actual transaction address...")
+    // Step 4: Update metadata with actual transaction ID
     const updatedMetadata = {
       ...finalMetadata,
-      attributes: [
-        { trait_type: "Collection", value: `#${collectionNumber}` },
-        { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Creator", value: "x1xo.com" },
-        { trait_type: "Transaction", value: mintResult.transactionSignature }, // Actual NFT transaction address
-        {
-          trait_type: "Website",
-          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-        },
-      ],
+      attributes: finalMetadata.attributes.map((attr) =>
+        attr.trait_type === "Transaction" ? { ...attr, value: mintResult.transactionSignature } : attr,
+      ),
     }
 
-    // Upload updated metadata with transaction address
-    const updatedUploadResult = await uploadToPinata(updatedMetadata)
-
-    const finalMetadataUrl = uploadResult.url // Use original CID that NFT points to
-
-    if (updatedUploadResult.success) {
-      console.log("✅ Updated metadata with transaction address uploaded")
-      console.log("⚠️  Note: NFT points to original metadata CID to avoid URI mismatch")
-    }
+    // Upload updated metadata
+    const finalUploadResult = await uploadToPinata(updatedMetadata)
 
     console.log("🎉 === NFT MINTING COMPLETE (CORE) ===")
 
@@ -585,14 +547,14 @@ export default async function handler(req, res) {
       success: true,
       mintAddress: mintResult.mintAddress,
       transactionSignature: mintResult.transactionSignature,
-      metadataUrl: finalMetadataUrl, // Return original CID that NFT actually points to
-      imageUrl: finalImageUrl, // Return WordPress media URL
+      metadataUrl: uploadResult.url, // Return original URL that NFT points to
+      imageUrl: finalImageUrl,
       explorerUrl: mintResult.explorerUrl,
       network: SOLANA_NETWORK,
       method: "core",
       isImmutable: mintResult.isImmutable,
       collectionNumber: collectionNumber,
-      message: "NFT minted successfully! It may take 5-10 minutes to appear in Phantom wallet due to indexing delays.",
+      message: "NFT minted successfully! Check Phantom wallet in 15-30 minutes.",
     })
   } catch (error) {
     console.error("❌ Mint NFT error:", error)
