@@ -508,7 +508,6 @@ export default async function handler(req, res) {
         { trait_type: "Collection", value: `#${collectionNumber}` },
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo.com" },
-        { trait_type: "Transaction", value: "pending" }, // Placeholder - will be updated after mint
         {
           trait_type: "Website",
           value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
@@ -553,15 +552,15 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 4: Update metadata with transaction address and re-upload to same CID
-    console.log("📝 Step 4: Updating metadata with actual transaction address...")
+    // Step 4: Update metadata with transaction address and re-upload
+    console.log("📝 Step 4: Updating metadata with transaction address...")
     const updatedMetadata = {
       ...finalMetadata,
       attributes: [
         { trait_type: "Collection", value: `#${collectionNumber}` },
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo.com" },
-        { trait_type: "Transaction", value: mintResult.transactionSignature }, // Actual NFT transaction address
+        { trait_type: "Transaction", value: mintResult.transactionSignature }, // NFT transaction address
         {
           trait_type: "Website",
           value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
@@ -572,11 +571,8 @@ export default async function handler(req, res) {
     // Upload updated metadata with transaction address
     const updatedUploadResult = await uploadToPinata(updatedMetadata)
 
-    const finalMetadataUrl = uploadResult.url // Use original CID that NFT points to
-
     if (updatedUploadResult.success) {
       console.log("✅ Updated metadata with transaction address uploaded")
-      console.log("⚠️  Note: NFT points to original metadata CID to avoid URI mismatch")
     }
 
     console.log("🎉 === NFT MINTING COMPLETE (CORE) ===")
@@ -585,7 +581,7 @@ export default async function handler(req, res) {
       success: true,
       mintAddress: mintResult.mintAddress,
       transactionSignature: mintResult.transactionSignature,
-      metadataUrl: finalMetadataUrl, // Return original CID that NFT actually points to
+      metadataUrl: updatedUploadResult.url,
       imageUrl: finalImageUrl, // Return WordPress media URL
       explorerUrl: mintResult.explorerUrl,
       network: SOLANA_NETWORK,
