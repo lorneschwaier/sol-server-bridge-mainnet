@@ -456,11 +456,10 @@ export default async function handler(req, res) {
 
     if (metadata.collection_number) {
       collectionNumber = Number.parseInt(metadata.collection_number) || 1
-      console.log(`🔢 Using collection number: ${collectionNumber}`)
-    } else {
-      // Generate a random collection number if not provided
-      collectionNumber = Math.floor(Math.random() * 10000) + 1
-      console.log(`🔢 Generated random collection number: ${collectionNumber}`)
+      console.log(`🔢 Using manual collection number: ${collectionNumber}`)
+    } else if (metadata.product_id) {
+      collectionNumber = Number.parseInt(metadata.product_id) || 1
+      console.log(`🔢 Fallback to product ID as collection number: ${collectionNumber}`)
     }
 
     if (metadata.name) {
@@ -553,12 +552,10 @@ export default async function handler(req, res) {
       })
     }
 
+    // Step 4: Update metadata with actual transaction ID
     const updatedMetadata = {
       ...finalMetadata,
-      attributes: [
-        ...finalMetadata.attributes.filter((attr) => attr.trait_type !== "Transaction"), // Remove any existing transaction
-        { trait_type: "Transaction", value: mintResult.transactionSignature },
-      ],
+      attributes: [...finalMetadata.attributes, { trait_type: "Transaction", value: mintResult.transactionSignature }],
     }
 
     // Upload updated metadata
