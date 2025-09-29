@@ -449,29 +449,51 @@ export default async function handler(req, res) {
     const finalImageUrl = metadata.image // Use WordPress media URL directly
     console.log("✅ Using WordPress media URL:", finalImageUrl)
 
-    // Generate collection number
-    let collectionNumber = Math.floor(Math.random() * 10000) + 1
+    let collectionNumber = 1
+    let nftName = "Matrix NFT"
+    let nftSymbol = "XENO"
+    let productUrl = `https://x1xo.com/product/nft?nft=1`
+
+    if (metadata.collection_number) {
+      collectionNumber = Number.parseInt(metadata.collection_number) || 1
+      console.log(`🔢 Using manual collection number: ${collectionNumber}`)
+    } else if (metadata.product_id) {
+      collectionNumber = Number.parseInt(metadata.product_id) || 1
+      console.log(`🔢 Fallback to product ID as collection number: ${collectionNumber}`)
+    }
+
     if (metadata.name) {
-      const nameMatch = metadata.name.match(/(\d+)(?!.*\d)/)
-      if (nameMatch) {
-        collectionNumber = Number.parseInt(nameMatch[1])
-        console.log(`🔢 Extracted collection number ${collectionNumber} from NFT name: ${metadata.name}`)
-      }
+      nftName = metadata.name
+      console.log(`🏷️ Using actual NFT name: ${nftName}`)
+    }
+
+    if (metadata.symbol) {
+      nftSymbol = metadata.symbol
+      console.log(`🔤 Using actual NFT symbol: ${nftSymbol}`)
+    }
+
+    if (metadata.product_url) {
+      productUrl = metadata.product_url
+      console.log(`🔗 Using actual product URL: ${productUrl}`)
+    } else if (metadata.product_slug) {
+      productUrl = `https://x1xo.com/product/${metadata.product_slug}?nft=1`
+      console.log(`🔗 Generated product URL from slug: ${productUrl}`)
     }
 
     const finalMetadata = {
-      name: metadata.name || "Matrix NFT",
-      symbol: "XENO", // Rich metadata has symbol
+      name: nftName,
+      symbol: nftSymbol,
       description: metadata.description || "Minted via WordPress store",
-      image: finalImageUrl, // WordPress media URL
-      external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+      image: finalImageUrl,
+      external_url: productUrl,
       seller_fee_basis_points: 500, // 5% royalty in off-chain metadata
       attributes: [
-        { trait_type: "Product ID", value: metadata.product_id || collectionNumber.toString() },
+        { trait_type: "Collection Number", value: collectionNumber.toString() },
+        { trait_type: "Character Name", value: String(metadata.character_name || "Unknown") },
         { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Creator", value: "WordPress Store" },
+        { trait_type: "Creator", value: "x1xo.com" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
-        { trait_type: "Transaction", value: "PLACEHOLDER_TRANSACTION_ID" }, // Will be updated after mint
+        ...(metadata.attributes || []),
       ],
       properties: {
         files: [
@@ -498,7 +520,7 @@ export default async function handler(req, res) {
       },
     }
 
-    console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
+    console.log("📋 Final metadata with actual product data:", JSON.stringify(finalMetadata, null, 2))
 
     // Step 2: Upload metadata to Pinata
     console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
@@ -515,7 +537,7 @@ export default async function handler(req, res) {
     console.log("⚡ Step 3: Minting NFT with Core...")
     const mintResult = await mintNFTWithCore(
       walletAddress,
-      { name: metadata.name || "Matrix NFT" }, // Simple metadata for on-chain
+      { name: nftName },
       uploadResult.url,
       creatorKeypair,
       creatorUmi,
@@ -533,9 +555,7 @@ export default async function handler(req, res) {
     // Step 4: Update metadata with actual transaction ID
     const updatedMetadata = {
       ...finalMetadata,
-      attributes: finalMetadata.attributes.map((attr) =>
-        attr.trait_type === "Transaction" ? { ...attr, value: mintResult.transactionSignature } : attr,
-      ),
+      attributes: [...finalMetadata.attributes, { trait_type: "Transaction", value: mintResult.transactionSignature }],
     }
 
     // Upload updated metadata
@@ -553,7 +573,7 @@ export default async function handler(req, res) {
       network: SOLANA_NETWORK,
       method: "core",
       isImmutable: mintResult.isImmutable,
-      collectionNumber: collectionNumber,
+      collectionNumber: collectionNumber, // Return actual collection number
       message: "NFT minted successfully! Check Phantom wallet in 15-30 minutes.",
     })
   } catch (error) {
