@@ -456,11 +456,10 @@ export default async function handler(req, res) {
 
     if (metadata.collection_number) {
       collectionNumber = Number.parseInt(metadata.collection_number) || 1
-      console.log(`🔢 Using collection number: ${collectionNumber}`)
-    } else {
-      // Generate a random collection number if not provided
-      collectionNumber = Math.floor(Math.random() * 10000) + 1
-      console.log(`🔢 Generated random collection number: ${collectionNumber}`)
+      console.log(`🔢 Using manual collection number: ${collectionNumber}`)
+    } else if (metadata.product_id) {
+      collectionNumber = Number.parseInt(metadata.product_id) || 1
+      console.log(`🔢 Fallback to product ID as collection number: ${collectionNumber}`)
     }
 
     if (metadata.name) {
@@ -489,11 +488,11 @@ export default async function handler(req, res) {
       external_url: productUrl,
       seller_fee_basis_points: 500, // 5% royalty in off-chain metadata
       attributes: [
-        { trait_type: "Collection Number", value: collectionNumber.toString() },
-        { trait_type: "Character Name", value: String(metadata.character_name || "Unknown") },
+        { trait_type: "Product ID", value: collectionNumber.toString() },
         { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Creator", value: "x1xo.com" },
+        { trait_type: "Creator", value: "WordPress Store" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
+        { trait_type: "Transaction", value: "PLACEHOLDER_TRANSACTION_ID" }, // Will be updated after mint
         ...(metadata.attributes || []),
       ],
       properties: {
@@ -538,7 +537,7 @@ export default async function handler(req, res) {
     console.log("⚡ Step 3: Minting NFT with Core...")
     const mintResult = await mintNFTWithCore(
       walletAddress,
-      { name: nftName },
+      { name: nftName }, // Use actual NFT name
       uploadResult.url,
       creatorKeypair,
       creatorUmi,
@@ -553,12 +552,12 @@ export default async function handler(req, res) {
       })
     }
 
+    // Step 4: Update metadata with actual transaction ID
     const updatedMetadata = {
       ...finalMetadata,
-      attributes: [
-        ...finalMetadata.attributes.filter((attr) => attr.trait_type !== "Transaction"), // Remove any existing transaction
-        { trait_type: "Transaction", value: mintResult.transactionSignature },
-      ],
+      attributes: finalMetadata.attributes.map((attr) =>
+        attr.trait_type === "Transaction" ? { ...attr, value: mintResult.transactionSignature } : attr,
+      ),
     }
 
     // Upload updated metadata
