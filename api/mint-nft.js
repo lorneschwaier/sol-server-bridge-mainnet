@@ -342,9 +342,8 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
       transactionSignature: result.signature,
       metadataUrl: metadataUrl,
       explorerUrl: explorerUrl,
-      collectionNumber: collectionNumber,
-      method: "core",
       network: SOLANA_NETWORK,
+      method: "core",
       isImmutable: false,
       note: "Core NFTs may take 1-5 minutes to appear in Phantom wallet due to indexing delays",
     }
@@ -449,29 +448,66 @@ export default async function handler(req, res) {
     const finalImageUrl = metadata.image // Use WordPress media URL directly
     console.log("✅ Using WordPress media URL:", finalImageUrl)
 
-    // Generate collection number
-    let collectionNumber = Math.floor(Math.random() * 10000) + 1
-    if (metadata.name) {
-      const nameMatch = metadata.name.match(/(\d+)(?!.*\d)/)
-      if (nameMatch) {
-        collectionNumber = Number.parseInt(nameMatch[1])
-        console.log(`🔢 Extracted collection number ${collectionNumber} from NFT name: ${metadata.name}`)
-      }
+    let collectionNumber = null
+    let nftName = metadata.name || "Matrix NFT"
+    let nftSymbol = metadata.symbol || "XENO"
+    let productUrl = `https://x1xo.com/product/nft?nft=1`
+    let collectionAddress = null
+
+    if (metadata.collection_number) {
+      collectionNumber = Number.parseInt(metadata.collection_number) || null
+      console.log(`🔢 Using collection number from metadata: ${collectionNumber}`)
+    } else {
+      console.log(`⚠️ No collection number provided - NFT will not have a collection number`)
+    }
+
+    if (collectionNumber) {
+      nftName = `${nftName} #${collectionNumber}`
+      console.log(`🏷️ NFT name with collection number: ${nftName}`)
+    } else {
+      console.log(`🏷️ Using NFT name without collection number: ${nftName}`)
+    }
+
+    if (metadata.symbol) {
+      nftSymbol = metadata.symbol
+      console.log(`🔤 Using NFT symbol: ${nftSymbol}`)
+    }
+
+    if (metadata.collection_address) {
+      collectionAddress = metadata.collection_address
+      console.log(`🔗 Using collection address: ${collectionAddress}`)
+    }
+
+    if (metadata.product_url) {
+      productUrl = metadata.product_url
+      console.log(`🔗 Using product URL: ${productUrl}`)
+    } else if (metadata.product_slug) {
+      productUrl = `https://x1xo.com/product/${metadata.product_slug}?nft=1`
+      console.log(`🔗 Generated product URL from slug: ${productUrl}`)
+    }
+
+    const baseAttributes = [
+      { trait_type: "Creator", value: "x1xo.com" },
+      { trait_type: "Website", value: "https://x1xo.com" },
+      { trait_type: "Product Page", value: productUrl },
+      { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
+      { trait_type: "Platform", value: "WordPress" }, // Last for marketing awareness
+    ]
+
+    if (collectionNumber) {
+      baseAttributes.unshift({ trait_type: "Collection #", value: collectionNumber.toString() })
     }
 
     const finalMetadata = {
-      name: metadata.name || "Matrix NFT",
-      symbol: "XENO", // Rich metadata has symbol
+      name: nftName,
+      symbol: nftSymbol,
       description: metadata.description || "Minted via WordPress store",
-      image: finalImageUrl, // WordPress media URL
-      external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-      seller_fee_basis_points: 500, // 5% royalty in off-chain metadata
+      image: finalImageUrl,
+      external_url: productUrl,
+      seller_fee_basis_points: 500, // 5% royalty
       attributes: [
-        { trait_type: "Product ID", value: metadata.product_id || collectionNumber.toString() },
-        { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Creator", value: "WordPress Store" },
-        { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
-        { trait_type: "Transaction", value: "PLACEHOLDER_TRANSACTION_ID" }, // Will be updated after mint
+        ...baseAttributes,
+        ...(metadata.attributes || []), // Add custom attributes from WordPress
       ],
       properties: {
         files: [
@@ -498,7 +534,16 @@ export default async function handler(req, res) {
       },
     }
 
-    console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
+    if (collectionAddress) {
+      finalMetadata.collection = {
+        name: nftName.split(" #")[0], // Get collection name without number
+        family: "x1xo.com NFTs",
+        address: collectionAddress,
+      }
+      console.log(`🔗 Added collection info to metadata with address: ${collectionAddress}`)
+    }
+
+    console.log("📋 Final metadata (NO product_id):", JSON.stringify(finalMetadata, null, 2))
 
     // Step 2: Upload metadata to Pinata
     console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
@@ -515,7 +560,7 @@ export default async function handler(req, res) {
     console.log("⚡ Step 3: Minting NFT with Core...")
     const mintResult = await mintNFTWithCore(
       walletAddress,
-      { name: metadata.name || "Matrix NFT" }, // Simple metadata for on-chain
+      { name: nftName },
       uploadResult.url,
       creatorKeypair,
       creatorUmi,
@@ -530,12 +575,12 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 4: Update metadata with actual transaction ID
     const updatedMetadata = {
       ...finalMetadata,
-      attributes: finalMetadata.attributes.map((attr) =>
-        attr.trait_type === "Transaction" ? { ...attr, value: mintResult.transactionSignature } : attr,
-      ),
+      attributes: [
+        ...finalMetadata.attributes.filter((attr) => attr.trait_type !== "Transaction"), // Remove any existing transaction
+        { trait_type: "Transaction", value: mintResult.transactionSignature },
+      ],
     }
 
     // Upload updated metadata
@@ -553,7 +598,8 @@ export default async function handler(req, res) {
       network: SOLANA_NETWORK,
       method: "core",
       isImmutable: mintResult.isImmutable,
-      collectionNumber: collectionNumber,
+      collectionNumber: collectionNumber, // Return actual collection number (can be null)
+      collectionAddress: collectionAddress, // Return collection address
       message: "NFT minted successfully! Check Phantom wallet in 15-30 minutes.",
     })
   } catch (error) {
