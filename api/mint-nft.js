@@ -465,18 +465,13 @@ export default async function handler(req, res) {
       description: metadata.description || "Minted via WordPress store",
       image: finalImageUrl, // WordPress media URL
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-      seller_fee_basis_points: 300, // Changed from 500 (5%) to 300 (3%) to match your input
+      seller_fee_basis_points: 500, // 5% royalty in off-chain metadata
       attributes: [
-        { trait_type: "Collection #", value: collectionNumber.toString() }, // Changed from "Product ID" to "Collection #"
-        { trait_type: "Creator", value: "x1xo.com" }, // Changed from "WordPress Store" to "x1xo.com"
-        { trait_type: "Website", value: "https://x1xo.com" }, // Added Website attribute
-        {
-          trait_type: "Product Page",
-          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
-        }, // Added Product Page attribute
+        { trait_type: "Product ID", value: metadata.product_id || collectionNumber.toString() },
+        { trait_type: "Platform", value: "WordPress" },
+        { trait_type: "Creator", value: "WordPress Store" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
-        { trait_type: "NFT Address", value: "PLACEHOLDER_NFT_ADDRESS" }, // Changed from "Transaction" to "NFT Address"
-        { trait_type: "Platform", value: "WordPress" }, // Moved Platform to last position for marketing
+        { trait_type: "Transaction", value: "PLACEHOLDER_TRANSACTION_ID" }, // Will be updated after mint
       ],
       properties: {
         files: [
@@ -535,11 +530,11 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 4: Update metadata with actual NFT address
+    // Step 4: Update metadata with actual transaction ID
     const updatedMetadata = {
       ...finalMetadata,
       attributes: finalMetadata.attributes.map((attr) =>
-        attr.trait_type === "NFT Address" ? { ...attr, value: mintResult.mintAddress } : attr,
+        attr.trait_type === "Transaction" ? { ...attr, value: mintResult.transactionSignature } : attr,
       ),
     }
 
