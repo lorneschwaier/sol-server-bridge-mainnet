@@ -476,22 +476,21 @@ export default async function handler(req, res) {
       productUrl = metadata.product_url
       console.log(`🔗 Using actual product URL: ${productUrl}`)
     } else if (metadata.product_slug) {
-      productUrl = `https://x1xo.com/product/${metadata.product_slug}?nft=1`
+      productUrl = `https://x1xo.com/product/${metadata.product_slug || "nft"}`
       console.log(`🔗 Generated product URL from slug: ${productUrl}`)
     }
 
     const finalMetadata = {
       name: metadata.name || "Matrix NFT",
-      symbol: "XENO", // Rich metadata has symbol
+      symbol: "XENO",
       description: metadata.description || "Minted via WordPress store",
-      image: finalImageUrl, // WordPress media URL
+      image: finalImageUrl,
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       attributes: [
         { trait_type: "Product ID", value: metadata.product_id || collectionNumber.toString() },
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "WordPress Store" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
-        { trait_type: "Transaction", value: "PLACEHOLDER_TRANSACTION_ID" }, // Will be updated after mint
       ],
       properties: {
         files: [
@@ -518,7 +517,7 @@ export default async function handler(req, res) {
       },
     }
 
-    console.log("📋 Final metadata with actual product data:", JSON.stringify(finalMetadata, null, 2))
+    console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
 
     // Step 2: Upload metadata to Pinata
     console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
@@ -535,11 +534,11 @@ export default async function handler(req, res) {
     console.log("⚡ Step 3: Minting NFT with Core...")
     const mintResult = await mintNFTWithCore(
       walletAddress,
-      { name: nftName }, // Use actual NFT name
+      { name: metadata.name || "Matrix NFT" },
       uploadResult.url,
       creatorKeypair,
       creatorUmi,
-      false, // Keep mutable for better wallet recognition
+      false,
     )
 
     if (!mintResult.success) {
@@ -550,30 +549,19 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 4: Update metadata with actual transaction ID
-    const updatedMetadata = {
-      ...finalMetadata,
-      attributes: finalMetadata.attributes.map((attr) =>
-        attr.trait_type === "Transaction" ? { ...attr, value: mintResult.transactionSignature } : attr,
-      ),
-    }
-
-    // Upload updated metadata
-    const finalUploadResult = await uploadToPinata(updatedMetadata)
-
     console.log("🎉 === NFT MINTING COMPLETE (CORE) ===")
 
     res.json({
       success: true,
       mintAddress: mintResult.mintAddress,
       transactionSignature: mintResult.transactionSignature,
-      metadataUrl: uploadResult.url, // Return original URL that NFT points to
+      metadataUrl: uploadResult.url,
       imageUrl: finalImageUrl,
       explorerUrl: mintResult.explorerUrl,
       network: SOLANA_NETWORK,
       method: "core",
       isImmutable: mintResult.isImmutable,
-      collectionNumber: collectionNumber, // Return actual collection number
+      collectionNumber: collectionNumber,
       message: "NFT minted successfully! Check Phantom wallet in 15-30 minutes.",
     })
   } catch (error) {
