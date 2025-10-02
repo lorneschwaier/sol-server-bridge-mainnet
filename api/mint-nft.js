@@ -481,9 +481,9 @@ export default async function handler(req, res) {
     }
 
     const finalMetadata = {
-      name: `${metadata.name} #${collectionNumber}`,
+      name: `${metadata.nft_name || metadata.name || "NFT"} #${collectionNumber}`,
       symbol: "XENO",
-      description: metadata.description || "Minted via WordPress",
+      description: metadata.nft_description || metadata.description || "Minted via WordPress",
       image: finalImageUrl,
       website: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`, // For Solana Explorer
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
