@@ -449,17 +449,26 @@ export default async function handler(req, res) {
     const finalImageUrl = metadata.image // Use WordPress media URL directly
     console.log("✅ Using WordPress media URL:", finalImageUrl)
 
+    let royaltyPercentage = 0
+    if (metadata.royalty_percentage) {
+      royaltyPercentage = Number.parseFloat(metadata.royalty_percentage) || 0
+      console.log(`💰 Using royalty percentage: ${royaltyPercentage}%`)
+    }
+
+    // Convert percentage to basis points (e.g., 3% = 300 basis points)
+    const sellerFeeBasisPoints = Math.round(royaltyPercentage * 100)
+
     let collectionNumber = 1
+    if (metadata.collection_number) {
+      collectionNumber = Number.parseInt(metadata.collection_number) || 1
+      console.log(`🔢 Using collection number: ${collectionNumber}`)
+    } else {
+      console.log(`⚠️ No collection number provided, using default: 1`)
+    }
+
     let nftName = "Matrix NFT"
     let nftSymbol = "XENO"
     let productUrl = `https://x1xo.com/product/nft?nft=1`
-
-    if (metadata.collection_number) {
-      collectionNumber = Number.parseInt(metadata.collection_number) || 1
-      console.log(`🔢 Using collection number from WordPress: ${collectionNumber}`)
-    } else {
-      console.log(`⚠️ No collection_number provided, using default: 1`)
-    }
 
     if (metadata.name) {
       nftName = metadata.name
@@ -481,13 +490,14 @@ export default async function handler(req, res) {
 
     // Step 2: Upload metadata to Pinata
     console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
-    const uploadResult = await uploadToPinata({
+    const finalMetadata = {
       name: `${nftName} #${collectionNumber}`,
       symbol: nftSymbol,
       description: metadata.description || "Minted via WordPress",
       image: finalImageUrl,
-      website: productUrl, // For Solana Explorer
-      external_url: productUrl,
+      website: productUrl, // Top-level website field for Solana Explorer
+      external_url: productUrl, // External URL for Magic Eden and other marketplaces
+      seller_fee_basis_points: sellerFeeBasisPoints,
       attributes: [
         { trait_type: "Collection #", value: collectionNumber.toString() },
         { trait_type: "Creator", value: "x1xo.com" },
@@ -502,8 +512,16 @@ export default async function handler(req, res) {
           },
         ],
         category: "image",
+        creators: [
+          {
+            address: creatorKeypair.publicKey.toString(),
+            share: 100,
+          },
+        ],
       },
-    })
+    }
+
+    const uploadResult = await uploadToPinata(finalMetadata)
 
     if (!uploadResult.success) {
       return res.status(500).json({
