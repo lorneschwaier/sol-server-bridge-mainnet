@@ -485,6 +485,8 @@ export default async function handler(req, res) {
       symbol: "XENO",
       description: metadata.description || "Minted via WordPress",
       image: finalImageUrl,
+        // ADD THIS - This is what Solana Explorer uses for the Website field
+      website: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       attributes: [
         { trait_type: "Collection #", value: collectionNumber.toString() },
