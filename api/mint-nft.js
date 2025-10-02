@@ -456,37 +456,38 @@ export default async function handler(req, res) {
 
     if (metadata.collection_number) {
       collectionNumber = Number.parseInt(metadata.collection_number) || 1
-      console.log(`🔢 Using manual collection number: ${collectionNumber}`)
-    } else if (metadata.product_id) {
-      collectionNumber = Number.parseInt(metadata.product_id) || 1
-      console.log(`🔢 Fallback to product ID as collection number: ${collectionNumber}`)
+      console.log(`🔢 Using collection number from WordPress: ${collectionNumber}`)
+    } else {
+      console.log(`⚠️ No collection_number provided, using default: 1`)
     }
 
     if (metadata.name) {
       nftName = metadata.name
-      console.log(`🏷️ Using actual NFT name: ${nftName}`)
+      console.log(`🏷️ Using NFT name from WordPress: ${nftName}`)
     }
 
     if (metadata.symbol) {
       nftSymbol = metadata.symbol
-      console.log(`🔤 Using actual NFT symbol: ${nftSymbol}`)
+      console.log(`🔤 Using NFT symbol from WordPress: ${nftSymbol}`)
     }
 
     if (metadata.product_url) {
       productUrl = metadata.product_url
-      console.log(`🔗 Using actual product URL: ${productUrl}`)
+      console.log(`🔗 Using product URL from WordPress: ${productUrl}`)
     } else if (metadata.product_slug) {
       productUrl = `https://x1xo.com/product/${metadata.product_slug || "nft"}`
       console.log(`🔗 Generated product URL from slug: ${productUrl}`)
     }
 
-    const finalMetadata = {
-      name: `${metadata.nft_name || metadata.name || "NFT"} #${collectionNumber}`,
-      symbol: "XENO",
-      description: metadata.nft_description || metadata.description || "Minted via WordPress",
+    // Step 2: Upload metadata to Pinata
+    console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
+    const uploadResult = await uploadToPinata({
+      name: `${nftName} #${collectionNumber}`,
+      symbol: nftSymbol,
+      description: metadata.description || "Minted via WordPress",
       image: finalImageUrl,
-      website: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`, // For Solana Explorer
-      external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+      website: productUrl, // For Solana Explorer
+      external_url: productUrl,
       attributes: [
         { trait_type: "Collection #", value: collectionNumber.toString() },
         { trait_type: "Creator", value: "x1xo.com" },
@@ -502,13 +503,7 @@ export default async function handler(req, res) {
         ],
         category: "image",
       },
-    }
-
-    console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
-
-    // Step 2: Upload metadata to Pinata
-    console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
-    const uploadResult = await uploadToPinata(finalMetadata)
+    })
 
     if (!uploadResult.success) {
       return res.status(500).json({
