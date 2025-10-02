@@ -449,6 +449,9 @@ export default async function handler(req, res) {
     const finalImageUrl = metadata.image // Use WordPress media URL directly
     console.log("✅ Using WordPress media URL:", finalImageUrl)
 
+    console.log("📦 RECEIVED METADATA:", JSON.stringify(metadata, null, 2))
+    console.log("📦 RECEIVED BODY:", JSON.stringify(req.body, null, 2))
+
     let collectionNumber = 1
     let nftName = "Matrix NFT"
     let nftSymbol = "XENO"
@@ -456,9 +459,19 @@ export default async function handler(req, res) {
 
     if (metadata.collection_number) {
       collectionNumber = Number.parseInt(metadata.collection_number) || 1
-      console.log(`🔢 Using collection number: ${collectionNumber}`)
+      console.log(`🔢 Using metadata.collection_number: ${collectionNumber}`)
+    } else if (metadata.collectionNumber) {
+      collectionNumber = Number.parseInt(metadata.collectionNumber) || 1
+      console.log(`🔢 Using metadata.collectionNumber: ${collectionNumber}`)
+    } else if (req.body.collection_number) {
+      collectionNumber = Number.parseInt(req.body.collection_number) || 1
+      console.log(`🔢 Using req.body.collection_number: ${collectionNumber}`)
+    } else if (req.body.collectionNumber) {
+      collectionNumber = Number.parseInt(req.body.collectionNumber) || 1
+      console.log(`🔢 Using req.body.collectionNumber: ${collectionNumber}`)
     } else {
-      throw new Error("collection_number is required in metadata")
+      console.warn("⚠️ No collection_number found, defaulting to 1")
+      collectionNumber = 1
     }
 
     if (metadata.name) {
