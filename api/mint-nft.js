@@ -481,40 +481,29 @@ export default async function handler(req, res) {
     }
 
     const finalMetadata = {
-      name: metadata.name || "Matrix NFT",
-      symbol: nftSymbol, // Rich metadata has symbol
-      description: metadata.description || "Minted via WordPress store",
-      image: finalImageUrl, // WordPress media URL
+      name: `${metadata.name} #${collectionNumber}`,
+      symbol: "XENO",
+      description: metadata.description || "Minted via WordPress",
+      image: finalImageUrl,
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       attributes: [
         { trait_type: "Collection #", value: collectionNumber.toString() },
+        { trait_type: "Creator", value: "x1xo.com" },
         { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Creator", value: "WordPress Store" },
-        { trait_type: "Website", value: "https://x1xo.com" },
+        {
+          trait_type: "Web Page",
+          value: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+        },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
       ],
       properties: {
         files: [
           {
             uri: finalImageUrl,
-            type:
-              finalImageUrl.includes(".jpg") || finalImageUrl.includes(".jpeg")
-                ? "image/jpeg"
-                : finalImageUrl.includes(".png")
-                  ? "image/png"
-                  : finalImageUrl.includes(".webp")
-                    ? "image/webp"
-                    : "image/jpeg",
+            type: "image/png",
           },
         ],
         category: "image",
-        creators: [
-          {
-            address: creatorKeypair.publicKey.toString(),
-            verified: true,
-            share: 100,
-          },
-        ],
       },
     }
 
