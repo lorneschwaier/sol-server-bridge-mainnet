@@ -449,9 +449,6 @@ export default async function handler(req, res) {
     const finalImageUrl = metadata.image // Use WordPress media URL directly
     console.log("✅ Using WordPress media URL:", finalImageUrl)
 
-    console.log("📦 RECEIVED METADATA:", JSON.stringify(metadata, null, 2))
-    console.log("📦 RECEIVED BODY:", JSON.stringify(req.body, null, 2))
-
     let collectionNumber = 1
     let nftName = "Matrix NFT"
     let nftSymbol = "XENO"
@@ -459,24 +456,15 @@ export default async function handler(req, res) {
 
     if (metadata.collection_number) {
       collectionNumber = Number.parseInt(metadata.collection_number) || 1
-      console.log(`🔢 Using metadata.collection_number: ${collectionNumber}`)
-    } else if (metadata.collectionNumber) {
-      collectionNumber = Number.parseInt(metadata.collectionNumber) || 1
-      console.log(`🔢 Using metadata.collectionNumber: ${collectionNumber}`)
-    } else if (req.body.collection_number) {
-      collectionNumber = Number.parseInt(req.body.collection_number) || 1
-      console.log(`🔢 Using req.body.collection_number: ${collectionNumber}`)
-    } else if (req.body.collectionNumber) {
-      collectionNumber = Number.parseInt(req.body.collectionNumber) || 1
-      console.log(`🔢 Using req.body.collectionNumber: ${collectionNumber}`)
-    } else {
-      console.warn("⚠️ No collection_number found, defaulting to 1")
-      collectionNumber = 1
+      console.log(`🔢 Using manual collection number: ${collectionNumber}`)
+    } else if (metadata.product_id) {
+      collectionNumber = Number.parseInt(metadata.product_id) || 1
+      console.log(`🔢 Fallback to product ID as collection number: ${collectionNumber}`)
     }
 
     if (metadata.name) {
-      nftName = metadata.name.replace(/#\d+$/, "").trim()
-      console.log(`🏷️ Using NFT name (cleaned): ${nftName}`)
+      nftName = metadata.name
+      console.log(`🏷️ Using actual NFT name: ${nftName}`)
     }
 
     if (metadata.symbol) {
@@ -492,21 +480,15 @@ export default async function handler(req, res) {
       console.log(`🔗 Generated product URL from slug: ${productUrl}`)
     }
 
-    const royaltyPercentage = metadata.royalty_percentage ? Number.parseFloat(metadata.royalty_percentage) : 0
-    const sellerFeeBasisPoints = Math.round(royaltyPercentage * 100) // Convert percentage to basis points
-    console.log(`💰 Royalty percentage: ${royaltyPercentage}% (${sellerFeeBasisPoints} basis points)`)
-
     const finalMetadata = {
-      name: `${nftName} #${collectionNumber}`,
-      symbol: nftSymbol,
+      name: metadata.name || "NFT",
+      symbol: "XENO",
       description: metadata.description || "Minted via WordPress",
       image: finalImageUrl,
-      external_url: productUrl,
-      seller_fee_basis_points: sellerFeeBasisPoints,
+      external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       attributes: [
-        { trait_type: "Collection #", value: collectionNumber.toString() },
-        { trait_type: "Creator", value: metadata.creator || "x1xo.com" },
         { trait_type: "Platform", value: "WordPress" },
+        { trait_type: "Creator", value: "x1xo.com" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
       ],
       properties: {
@@ -533,6 +515,8 @@ export default async function handler(req, res) {
         ],
       },
     }
+
+    console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
 
     // Step 2: Upload metadata to Pinata
     console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
