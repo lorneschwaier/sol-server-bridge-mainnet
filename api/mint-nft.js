@@ -483,14 +483,14 @@ export default async function handler(req, res) {
     const finalMetadata = {
       name: metadata.name || "Matrix NFT",
       symbol: "XENO",
-      description: metadata.description || "Minted via WordPress store",
+      description: metadata.description || "Minted via WordPress",
       image: finalImageUrl,
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       attributes: [
-        { trait_type: "Product ID", value: metadata.product_id || collectionNumber.toString() },
+        { trait_type: "Creator", value: "x1xo.com" },
         { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Creator", value: "WordPress Store" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
+        { trait_type: "Product ID", value: metadata.product_id || collectionNumber.toString() },
       ],
       properties: {
         files: [
