@@ -450,29 +450,26 @@ export default async function handler(req, res) {
     console.log("✅ Using WordPress media URL:", finalImageUrl)
 
     let collectionNumber = 1
-    let nftName = "NFT" // Changed from "Matrix NFT" to generic "NFT"
+    let nftName = "Matrix NFT"
     let nftSymbol = "XENO"
     let productUrl = `https://x1xo.com/product/nft?nft=1`
 
     if (metadata.collection_number) {
       collectionNumber = Number.parseInt(metadata.collection_number) || 1
-      console.log(`🔢 Using collection number from WordPress: ${collectionNumber}`)
-    } else {
-      console.log(`⚠️ No collection_number provided, using default: ${collectionNumber}`)
+      console.log(`🔢 Using manual collection number: ${collectionNumber}`)
+    } else if (metadata.product_id) {
+      collectionNumber = Number.parseInt(metadata.product_id) || 1
+      console.log(`🔢 Fallback to product ID as collection number: ${collectionNumber}`)
     }
 
     if (metadata.name) {
       nftName = metadata.name
-      console.log(`🏷️ Using NFT name from WordPress: ${nftName}`)
-    } else {
-      console.log(`⚠️ No name provided, using default: ${nftName}`)
+      console.log(`🏷️ Using actual NFT name: ${nftName}`)
     }
 
     if (metadata.symbol) {
       nftSymbol = metadata.symbol
-      console.log(`🔤 Using NFT symbol from WordPress: ${nftSymbol}`)
-    } else {
-      console.log(`⚠️ No symbol provided, using default: ${nftSymbol}`)
+      console.log(`🔤 Using actual NFT symbol: ${nftSymbol}`)
     }
 
     if (metadata.product_url) {
@@ -484,15 +481,15 @@ export default async function handler(req, res) {
     }
 
     const finalMetadata = {
-      name: `${nftName} #${collectionNumber}`, // Use dynamic values
-      symbol: nftSymbol, // Use dynamic symbol
+      name: metadata.name || "Matrix NFT",
+      symbol: "XENO",
       description: metadata.description || "Minted via WordPress store",
       image: finalImageUrl,
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       attributes: [
-        { trait_type: "Collection #", value: collectionNumber.toString() }, // Changed from "Product ID" to "Collection #"
+        { trait_type: "Product ID", value: metadata.product_id || collectionNumber.toString() },
         { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Creator", value: metadata.creator || "x1xo.com" }, // Use dynamic creator
+        { trait_type: "Creator", value: "WordPress Store" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
       ],
       properties: {
@@ -537,7 +534,7 @@ export default async function handler(req, res) {
     console.log("⚡ Step 3: Minting NFT with Core...")
     const mintResult = await mintNFTWithCore(
       walletAddress,
-      { name: `${nftName} #${collectionNumber}` }, // Use dynamic name with collection number
+      { name: metadata.name || "Matrix NFT" },
       uploadResult.url,
       creatorKeypair,
       creatorUmi,
