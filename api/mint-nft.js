@@ -469,7 +469,7 @@ export default async function handler(req, res) {
 
     if (metadata.symbol) {
       nftSymbol = metadata.symbol
-      console.log(`🔤 Using actual NFT symbol: ${nftSymbol}`)
+      console.log(`🔤 Using actual NFT  ${nftSymbol}`)
     }
 
     if (metadata.product_url) {
@@ -482,15 +482,15 @@ export default async function handler(req, res) {
 
     const finalMetadata = {
       name: metadata.name || "Matrix NFT",
-      symbol: "XENO",
+      symbol: nftSymbol,
       description: metadata.description || "Minted via WordPress",
       image: finalImageUrl,
+      website: "https://x1xo.com",
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       attributes: [
-        { trait_type: "Product ID", value: metadata.product_id || collectionNumber.toString() },
+        { trait_type: "Collection #", value: collectionNumber.toString() }
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo" },
-        { trait_type: "Website", value: "x1xo.com" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
       ],
       properties: {
