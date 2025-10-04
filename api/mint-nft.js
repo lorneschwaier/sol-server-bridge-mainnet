@@ -493,7 +493,8 @@ export default async function handler(req, res) {
     let nftName = "Matrix NFT"
     let nftDescription = "Minted via WordPress"
     const nftSymbol = "XENO"
-    const productUrl = `https://x1xo.com/product/nft?nft=1`
+    const productUrl =
+      metadata.product_url || metadata.external_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`
     let royaltyPercentage = 0
 
     if (metadata.royalty_percentage) {
@@ -551,6 +552,7 @@ export default async function handler(req, res) {
     }
 
     console.log(`📝 FINAL nftDescription: "${nftDescription}"`)
+    console.log(`🔗 FINAL productUrl (external_url): "${productUrl}"`)
 
     const finalMetadata = {
       name: nftName,
