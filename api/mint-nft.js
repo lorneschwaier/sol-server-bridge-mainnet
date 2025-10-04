@@ -389,7 +389,14 @@ export default async function handler(req, res) {
     console.log("metadata.collection_number:", metadata.collection_number)
     console.log("metadata.product_id:", metadata.product_id)
     console.log("metadata.name:", metadata.name)
+    console.log("metadata.nft_name:", metadata.nft_name)
+    console.log("metadata.description:", metadata.description)
+    console.log("metadata.nft_description:", metadata.nft_description)
     console.log("metadata.symbol:", metadata.symbol)
+    console.log("metadata.image:", metadata.image)
+    console.log("metadata.product_url:", metadata.product_url)
+    console.log("metadata.product_slug:", metadata.product_slug)
+    console.log("Full metadata keys:", Object.keys(metadata))
     console.log("Full metadata:", JSON.stringify(metadata, null, 2))
     console.log("=================================")
     console.log("🔑 Creator private key from Vercel env:", CREATOR_PRIVATE_KEY ? "Yes" : "No")
@@ -457,12 +464,22 @@ export default async function handler(req, res) {
 
     let collectionNumber = 1
     let nftName = "Matrix NFT"
+    let nftDescription = "Minted via WordPress"
     let nftSymbol = "XENO"
     let productUrl = `https://x1xo.com/product/nft?nft=1`
 
     if (metadata.collection_number) {
       collectionNumber = Number.parseInt(metadata.collection_number) || 1
       console.log(`🔢 Using manual collection number: ${collectionNumber}`)
+    } else if (metadata.name) {
+      const match = metadata.name.match(/#0*(\d+)/)
+      if (match && match[1]) {
+        collectionNumber = Number.parseInt(match[1]) || 1
+        console.log(`🔢 Extracted collection number from name: ${collectionNumber}`)
+      } else if (metadata.product_id) {
+        collectionNumber = Number.parseInt(metadata.product_id) || 1
+        console.log(`🔢 Fallback to product ID as collection number: ${collectionNumber}`)
+      }
     } else if (metadata.product_id) {
       collectionNumber = Number.parseInt(metadata.product_id) || 1
       console.log(`🔢 Fallback to product ID as collection number: ${collectionNumber}`)
@@ -472,7 +489,22 @@ export default async function handler(req, res) {
 
     if (metadata.name) {
       nftName = metadata.name
-      console.log(`🏷️ Using actual NFT name: ${nftName}`)
+      console.log(`🏷️ Using NFT name from metadata.name: ${nftName}`)
+    } else if (metadata.nft_name) {
+      nftName = metadata.nft_name
+      console.log(`🏷️ Using NFT name from metadata.nft_name: ${nftName}`)
+    } else {
+      console.log(`⚠️ No NFT name provided, using default: ${nftName}`)
+    }
+
+    if (metadata.description) {
+      nftDescription = metadata.description
+      console.log(`📝 Using description from metadata.description: ${nftDescription}`)
+    } else if (metadata.nft_description) {
+      nftDescription = metadata.nft_description
+      console.log(`📝 Using description from metadata.nft_description: ${nftDescription}`)
+    } else {
+      console.log(`⚠️ No description provided, using default: ${nftDescription}`)
     }
 
     if (metadata.symbol) {
@@ -489,20 +521,15 @@ export default async function handler(req, res) {
     }
 
     const finalMetadata = {
-      name: metadata.name || "Matrix NFT",
+      name: nftName,
       symbol: nftSymbol,
-      description: metadata.description || "Minted via WordPress",
+      description: nftDescription,
       image: finalImageUrl,
-      website: "https://x1xo.com",
-      external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
+      external_url: productUrl,
       attributes: [
         {
           trait_type: "Collection #",
-          value: (() => {
-            const value = collectionNumber.toString()
-            console.log(`[v0] Collection # trait value: ${value}`)
-            return value
-          })(),
+          value: collectionNumber.toString(),
         },
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo" },
@@ -550,7 +577,7 @@ export default async function handler(req, res) {
     console.log("⚡ Step 3: Minting NFT with Core...")
     const mintResult = await mintNFTWithCore(
       walletAddress,
-      { name: metadata.name || "Matrix NFT" },
+      { name: nftName },
       uploadResult.url,
       creatorKeypair,
       creatorUmi,
