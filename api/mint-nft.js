@@ -4,7 +4,7 @@ globalThis.Buffer = Buffer
 
 import { Connection, PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
-import { create, mplCore, fetchAsset } from "@metaplex-foundation/mpl-core" // Added fetchAsset, updateV1, revokePluginAuthorityV1
+import { create, mplCore, fetchAsset, ruleSet } from "@metaplex-foundation/mpl-core"
 import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
 import axios from "axios"
@@ -320,7 +320,7 @@ async function mintNFTWithCore(
                 percentage: 100,
               },
             ],
-            ruleSet: { type: "None" },
+            ruleSet: ruleSet("None"),
           },
         },
       ],
