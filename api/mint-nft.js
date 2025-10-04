@@ -449,7 +449,7 @@ export default async function handler(req, res) {
     const finalImageUrl = metadata.image // Use WordPress media URL directly
     console.log("✅ Using WordPress media URL:", finalImageUrl)
 
-    let collectionNumber = XO
+    let collectionNumber = 1
     let nftName = "xNFT"
     let nftSymbol = "XENO"
     let productUrl = `https://x1xo.com/product/nft?nft=1`
