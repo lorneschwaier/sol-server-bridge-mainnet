@@ -487,7 +487,7 @@ export default async function handler(req, res) {
       image: finalImageUrl,
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       attributes: [
-        { trait_type: "Collection #", value: collectionNumber.toString() },
+        { trait_type: "Product ID", value: metadata.product_id || collectionNumber.toString() },
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "WordPress Store" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
