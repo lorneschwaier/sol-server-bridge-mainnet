@@ -243,7 +243,15 @@ async function uploadToPinata(metadata) {
 }
 
 // Real NFT Minting with Metaplex Core
-async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeypair, creatorUmi, makeImmutable = true) {
+async function mintNFTWithCore(
+  walletAddress,
+  metadata,
+  metadataUrl,
+  creatorKeypair,
+  creatorUmi,
+  makeImmutable = true,
+  royaltyPercentage = 0,
+) {
   try {
     if (!creatorUmi) {
       throw new Error("Metaplex Core UMI not initialized - creator private key required")
@@ -254,6 +262,7 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
     console.log("📋 Metadata URL:", metadataUrl)
     console.log("🏷️ NFT Name:", metadata.name)
     console.log("🔒 Make Immutable:", makeImmutable)
+    console.log("💰 Royalty Percentage:", royaltyPercentage + "%")
 
     console.log("🔗 Finding working RPC connection...")
     const workingConnection = await getWorkingRPCConnection()
@@ -300,16 +309,31 @@ async function mintNFTWithCore(walletAddress, metadata, metadataUrl, creatorKeyp
       name: metadata.name || "Matrix NFT",
       uri: metadataUrl,
       owner: publicKey(walletAddress),
+      plugins: [
+        {
+          type: "Royalties",
+          data: {
+            basisPoints: royaltyPercentage * 100, // Convert percentage to basis points (3% = 300)
+            creators: [
+              {
+                address: creatorUmi.identity.publicKey,
+                percentage: 100,
+              },
+            ],
+            ruleSet: { type: "None" },
+          },
+        },
+      ],
     })
 
     console.log("📡 Submitting transaction to Solana...")
     const result = await createInstruction.sendAndConfirm(creatorUmi, {
       confirm: {
-        commitment: "finalized", // Wait for full finalization
+        commitment: "finalized",
       },
       send: {
         skipPreflight: false,
-        maxRetries: 3, // Retry failed transactions
+        maxRetries: 3,
       },
     })
 
@@ -392,6 +416,9 @@ export default async function handler(req, res) {
     console.log("metadata.nft_name:", metadata.nft_name)
     console.log("metadata.description:", metadata.description)
     console.log("metadata.nft_description:", metadata.nft_description)
+    console.log("metadata.royalty_percentage:", metadata.royalty_percentage)
+    console.log("metadata.royalty:", metadata.royalty)
+    console.log("metadata.royalties:", metadata.royalties)
     console.log("metadata.symbol:", metadata.symbol)
     console.log("metadata.image:", metadata.image)
     console.log("metadata.product_url:", metadata.product_url)
@@ -467,6 +494,22 @@ export default async function handler(req, res) {
     let nftDescription = "Minted via WordPress"
     let nftSymbol = "XENO"
     let productUrl = `https://x1xo.com/product/nft?nft=1`
+    let royaltyPercentage = 0
+
+    if (metadata.royalty_percentage) {
+      royaltyPercentage = Number.parseFloat(metadata.royalty_percentage) || 0
+      console.log(`💰 Using royalty percentage from metadata.royalty_percentage: ${royaltyPercentage}%`)
+    } else if (metadata.royalty) {
+      royaltyPercentage = Number.parseFloat(metadata.royalty) || 0
+      console.log(`💰 Using royalty percentage from metadata.royalty: ${royaltyPercentage}%`)
+    } else if (metadata.royalties) {
+      royaltyPercentage = Number.parseFloat(metadata.royalties) || 0
+      console.log(`💰 Using royalty percentage from metadata.royalties: ${royaltyPercentage}%`)
+    } else {
+      console.log(`⚠️ No royalty percentage provided, using default: ${royaltyPercentage}%`)
+    }
+
+    console.log(`💰 FINAL royaltyPercentage variable: ${royaltyPercentage}%`)
 
     if (metadata.collection_number) {
       collectionNumber = Number.parseInt(metadata.collection_number) || 1
@@ -526,6 +569,7 @@ export default async function handler(req, res) {
       description: nftDescription,
       image: finalImageUrl,
       external_url: productUrl,
+      seller_fee_basis_points: royaltyPercentage * 100,
       attributes: [
         {
           trait_type: "Collection #",
@@ -582,6 +626,7 @@ export default async function handler(req, res) {
       creatorKeypair,
       creatorUmi,
       false,
+      royaltyPercentage,
     )
 
     if (!mintResult.success) {
@@ -605,6 +650,7 @@ export default async function handler(req, res) {
       method: "core",
       isImmutable: mintResult.isImmutable,
       collectionNumber: collectionNumber,
+      royaltyPercentage: royaltyPercentage,
       message: "NFT minted successfully! Check Phantom wallet in 15-30 minutes.",
     })
   } catch (error) {
