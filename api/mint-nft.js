@@ -296,14 +296,6 @@ async function mintNFTWithCore(
 
     console.log("⚡ Creating NFT with Core (with creator verification)...")
 
-    const collectionNumber = Math.floor(Math.random() * 10000) + 1
-
-    console.log("🎨 === STARTING REAL NFT MINT WITH CORE ===")
-    console.log("👤 Recipient:", walletAddress)
-    console.log("📋 Metadata URL:", metadataUrl)
-    console.log("🏷️ NFT Name:", metadata.name)
-    console.log("🔢 Collection Number:", collectionNumber)
-
     const basisPoints = Math.max(0, Math.min(10000, Math.round((royaltyPercentage || 0) * 100)))
     console.log("💰 Calculated basis points:", basisPoints)
 
@@ -375,7 +367,6 @@ async function mintNFTWithCore(
       transactionSignature: result.signature,
       metadataUrl: metadataUrl,
       explorerUrl: explorerUrl,
-      collectionNumber: collectionNumber,
       method: "core",
       network: SOLANA_NETWORK,
       isImmutable: false,
@@ -498,11 +489,11 @@ export default async function handler(req, res) {
     const finalImageUrl = metadata.image // Use WordPress media URL directly
     console.log("✅ Using WordPress media URL:", finalImageUrl)
 
-    let collectionNumber = 1
+    let collectionNumber = null
     let nftName = "Matrix NFT"
     let nftDescription = "Minted via WordPress"
-    let nftSymbol = "XENO"
-    let productUrl = `https://x1xo.com/product/nft?nft=1`
+    const nftSymbol = "XENO"
+    const productUrl = `https://x1xo.com/product/nft?nft=1`
     let royaltyPercentage = 0
 
     if (metadata.royalty_percentage) {
@@ -521,56 +512,45 @@ export default async function handler(req, res) {
     console.log(`💰 FINAL royaltyPercentage variable: ${royaltyPercentage}%`)
 
     if (metadata.collection_number) {
-      collectionNumber = Number.parseInt(metadata.collection_number) || 1
+      collectionNumber = Number.parseInt(metadata.collection_number) || null
       console.log(`🔢 Using manual collection number: ${collectionNumber}`)
     } else if (metadata.name) {
       const match = metadata.name.match(/#0*(\d+)/)
       if (match && match[1]) {
-        collectionNumber = Number.parseInt(match[1]) || 1
-        console.log(`🔢 Extracted collection number from name: ${collectionNumber}`)
-      } else if (metadata.product_id) {
-        collectionNumber = Number.parseInt(metadata.product_id) || 1
-        console.log(`🔢 Fallback to product ID as collection number: ${collectionNumber}`)
+        collectionNumber = Number.parseInt(match[1]) || null
+        console.log(`🔢 Extracted collection number from name "${metadata.name}": ${collectionNumber}`)
+      } else {
+        console.log(`🔢 No # found in name "${metadata.name}", collection number will not be added`)
       }
-    } else if (metadata.product_id) {
-      collectionNumber = Number.parseInt(metadata.product_id) || 1
-      console.log(`🔢 Fallback to product ID as collection number: ${collectionNumber}`)
+    } else {
+      console.log(`🔢 No name provided, collection number will not be added`)
     }
 
-    console.log(`🔢 FINAL collectionNumber variable: ${collectionNumber}`)
+    console.log(`🔢 FINAL collectionNumber: ${collectionNumber}`)
 
-    if (metadata.name) {
-      nftName = metadata.name
-      console.log(`🏷️ Using NFT name from metadata.name: ${nftName}`)
-    } else if (metadata.nft_name) {
+    if (metadata.nft_name) {
       nftName = metadata.nft_name
-      console.log(`🏷️ Using NFT name from metadata.nft_name: ${nftName}`)
+      console.log(`🏷️ Using custom NFT name from nft_name field: "${nftName}"`)
+    } else if (metadata.name) {
+      nftName = metadata.name
+      console.log(`🏷️ No nft_name field, using product name: "${nftName}"`)
     } else {
-      console.log(`⚠️ No NFT name provided, using default: ${nftName}`)
+      console.log(`🏷️ No name provided, using default: "${nftName}"`)
     }
 
-    if (metadata.description) {
-      nftDescription = metadata.description
-      console.log(`📝 Using description from metadata.description: ${nftDescription}`)
-    } else if (metadata.nft_description) {
+    console.log(`🏷️ FINAL nftName: "${nftName}"`)
+
+    if (metadata.nft_description) {
       nftDescription = metadata.nft_description
-      console.log(`📝 Using description from metadata.nft_description: ${nftDescription}`)
+      console.log(`📝 Using custom description from nft_description field: "${nftDescription}"`)
+    } else if (metadata.description) {
+      nftDescription = metadata.description
+      console.log(`📝 No nft_description field, using product description: "${nftDescription}"`)
     } else {
-      console.log(`⚠️ No description provided, using default: ${nftDescription}`)
+      console.log(`📝 No description provided, using default: "${nftDescription}"`)
     }
 
-    if (metadata.symbol) {
-      nftSymbol = metadata.symbol
-      console.log(`🔤 Using actual NFT symbol: ${nftSymbol}`)
-    }
-
-    if (metadata.product_url) {
-      productUrl = metadata.product_url
-      console.log(`🔗 Using actual product URL: ${productUrl}`)
-    } else if (metadata.product_slug) {
-      productUrl = `https://x1xo.com/product/${metadata.product_slug || "nft"}`
-      console.log(`🔗 Generated product URL from slug: ${productUrl}`)
-    }
+    console.log(`📝 FINAL nftDescription: "${nftDescription}"`)
 
     const finalMetadata = {
       name: nftName,
@@ -580,10 +560,14 @@ export default async function handler(req, res) {
       external_url: productUrl,
       seller_fee_basis_points: royaltyPercentage * 100,
       attributes: [
-        {
-          trait_type: "Collection #",
-          value: collectionNumber.toString(),
-        },
+        ...(collectionNumber
+          ? [
+              {
+                trait_type: "Collection #",
+                value: collectionNumber.toString(),
+              },
+            ]
+          : []),
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
