@@ -450,7 +450,7 @@ export default async function handler(req, res) {
     console.log("✅ Using WordPress media URL:", finalImageUrl)
 
     let collectionNumber = 1
-    let nftName = "xNFT"
+    let nftName = "Matrix NFT"
     let nftSymbol = "XENO"
     let productUrl = `https://x1xo.com/product/nft?nft=1`
 
@@ -481,7 +481,7 @@ export default async function handler(req, res) {
     }
 
     const finalMetadata = {
-      name: metadata.name || "xNFT",
+      name: metadata.name || "Matrix NFT",
       symbol: "XENO",
       description: metadata.description || "Minted via WordPress store",
       image: finalImageUrl,
