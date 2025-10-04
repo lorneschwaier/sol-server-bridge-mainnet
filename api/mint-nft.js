@@ -485,7 +485,6 @@ export default async function handler(req, res) {
       symbol: nftSymbol,
       description: metadata.description || "Minted via WordPress",
       image: finalImageUrl,
-      website: "https://x1xo.com",
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       attributes: [
         { trait_type: "Collection #", value: collectionNumber.toString() }
