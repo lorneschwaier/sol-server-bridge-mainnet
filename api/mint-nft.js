@@ -385,7 +385,13 @@ export default async function handler(req, res) {
     console.log("🎨 === REAL NFT MINTING REQUEST (CORE) ===")
     console.log("👤 Wallet:", walletAddress)
     console.log("🔒 Make Immutable:", makeImmutable)
-    console.log("📋 Metadata:", JSON.stringify(metadata, null, 2))
+    console.log("📋 === WORDPRESS METADATA DEBUG ===")
+    console.log("metadata.collection_number:", metadata.collection_number)
+    console.log("metadata.product_id:", metadata.product_id)
+    console.log("metadata.name:", metadata.name)
+    console.log("metadata.symbol:", metadata.symbol)
+    console.log("Full metadata:", JSON.stringify(metadata, null, 2))
+    console.log("=================================")
     console.log("🔑 Creator private key from Vercel env:", CREATOR_PRIVATE_KEY ? "Yes" : "No")
     console.log("🏗️ Image hosting method: WordPress media library (x1xo.com)")
 
@@ -462,6 +468,8 @@ export default async function handler(req, res) {
       console.log(`🔢 Fallback to product ID as collection number: ${collectionNumber}`)
     }
 
+    console.log(`🔢 FINAL collectionNumber variable: ${collectionNumber}`)
+
     if (metadata.name) {
       nftName = metadata.name
       console.log(`🏷️ Using actual NFT name: ${nftName}`)
@@ -469,7 +477,7 @@ export default async function handler(req, res) {
 
     if (metadata.symbol) {
       nftSymbol = metadata.symbol
-      console.log(`🔤 Using actual NFT  ${nftSymbol}`)
+      console.log(`🔤 Using actual NFT symbol: ${nftSymbol}`)
     }
 
     if (metadata.product_url) {
@@ -485,9 +493,17 @@ export default async function handler(req, res) {
       symbol: nftSymbol,
       description: metadata.description || "Minted via WordPress",
       image: finalImageUrl,
+      website: "https://x1xo.com",
       external_url: metadata.product_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`,
       attributes: [
-        { trait_type: "Collection #", value: collectionNumber.toString() },
+        {
+          trait_type: "Collection #",
+          value: (() => {
+            const value = collectionNumber.toString()
+            console.log(`[v0] Collection # trait value: ${value}`)
+            return value
+          })(),
+        },
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
