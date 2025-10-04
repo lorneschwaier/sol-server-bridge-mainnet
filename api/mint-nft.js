@@ -4,7 +4,7 @@ globalThis.Buffer = Buffer
 
 import { Connection, PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
-import { create, mplCore, fetchAsset, ruleSet } from "@metaplex-foundation/mpl-core"
+import { create, mplCore, fetchAsset } from "@metaplex-foundation/mpl-core"
 import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
 import axios from "axios"
@@ -304,26 +304,35 @@ async function mintNFTWithCore(
     console.log("🏷️ NFT Name:", metadata.name)
     console.log("🔢 Collection Number:", collectionNumber)
 
+    const basisPoints = Math.max(0, Math.min(10000, Math.round((royaltyPercentage || 0) * 100)))
+    console.log("💰 Calculated basis points:", basisPoints)
+
+    const plugins = []
+
+    // Only add royalties plugin if basis points > 0
+    if (basisPoints > 0) {
+      plugins.push({
+        type: "Royalties",
+        basisPoints,
+        creators: [
+          {
+            address: creatorUmi.identity.publicKey,
+            percentage: 100,
+          },
+        ],
+        ruleSet: { __kind: "None" },
+      })
+      console.log("✅ Added royalties plugin with", basisPoints, "basis points")
+    } else {
+      console.log("⚠️ Skipping royalties plugin (0% royalty)")
+    }
+
     const createInstruction = create(creatorUmi, {
       asset,
       name: metadata.name || "Matrix NFT",
       uri: metadataUrl,
       owner: publicKey(walletAddress),
-      plugins: [
-        {
-          type: "Royalties",
-          data: {
-            basisPoints: royaltyPercentage * 100, // Convert percentage to basis points (3% = 300)
-            creators: [
-              {
-                address: creatorUmi.identity.publicKey,
-                percentage: 100,
-              },
-            ],
-            ruleSet: ruleSet("None"),
-          },
-        },
-      ],
+      ...(plugins.length > 0 && { plugins }),
     })
 
     console.log("📡 Submitting transaction to Solana...")
