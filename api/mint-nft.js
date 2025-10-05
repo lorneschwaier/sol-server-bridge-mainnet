@@ -251,6 +251,7 @@ async function mintNFTWithCore(
   creatorUmi,
   makeImmutable = true,
   royaltyPercentage = 0,
+  collectionAddress = null, // Added collection address parameter
 ) {
   try {
     if (!creatorUmi) {
@@ -263,6 +264,9 @@ async function mintNFTWithCore(
     console.log("🏷️ NFT Name:", metadata.name)
     console.log("🔒 Make Immutable:", makeImmutable)
     console.log("💰 Royalty Percentage:", royaltyPercentage + "%")
+    if (collectionAddress) {
+      console.log("🗂️ Collection Address:", collectionAddress)
+    }
 
     console.log("🔗 Finding working RPC connection...")
     const workingConnection = await getWorkingRPCConnection()
@@ -319,9 +323,22 @@ async function mintNFTWithCore(
       console.log("⚠️ Skipping royalties plugin (0% royalty)")
     }
 
+    if (collectionAddress) {
+      try {
+        const collectionPublicKey = publicKey(collectionAddress)
+        plugins.push({
+          type: "Collection",
+          collection: collectionPublicKey,
+        })
+        console.log("✅ Added collection plugin with address:", collectionAddress)
+      } catch (error) {
+        console.error("❌ Invalid collection address:", collectionAddress, error.message)
+      }
+    }
+
     const createInstruction = create(creatorUmi, {
       asset,
-      name: metadata.name || "Matrix NFT",
+      name: metadata.name,
       uri: metadataUrl,
       owner: publicKey(walletAddress),
       ...(plugins.length > 0 && { plugins }),
@@ -420,6 +437,7 @@ export default async function handler(req, res) {
     console.log("metadata.royalty:", metadata.royalty)
     console.log("metadata.royalties:", metadata.royalties)
     console.log("metadata.symbol:", metadata.symbol)
+    console.log("metadata.collection_address:", metadata.collection_address)
     console.log("metadata.image:", metadata.image)
     console.log("metadata.product_url:", metadata.product_url)
     console.log("metadata.product_slug:", metadata.product_slug)
@@ -490,7 +508,7 @@ export default async function handler(req, res) {
     console.log("✅ Using WordPress media URL:", finalImageUrl)
 
     let collectionNumber = null
-    const nftName = metadata.nft_name || metadata.name || "Untitled NFT"
+    const nftName = metadata.nft_name || metadata.name || `NFT #${metadata.product_id || Date.now()}`
     const nftDescription = metadata.nft_description || metadata.description || ""
     const nftSymbol = metadata.symbol || "XENO"
     const productUrl =
@@ -552,6 +570,14 @@ export default async function handler(req, res) {
               },
             ]
           : []),
+        ...(nftSymbol
+          ? [
+              {
+                trait_type: "Symbol",
+                value: nftSymbol,
+              },
+            ]
+          : []),
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
@@ -604,6 +630,7 @@ export default async function handler(req, res) {
       creatorUmi,
       false,
       royaltyPercentage,
+      metadata.collection_address || null, // Pass collection address from metadata
     )
 
     if (!mintResult.success) {
