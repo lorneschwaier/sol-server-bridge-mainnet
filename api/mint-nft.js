@@ -490,9 +490,9 @@ export default async function handler(req, res) {
     console.log("✅ Using WordPress media URL:", finalImageUrl)
 
     let collectionNumber = null
-    let nftName = "Matrix NFT"
-    let nftDescription = "Minted via WordPress"
-    const nftSymbol = "XENO"
+    const nftName = metadata.nft_name || metadata.name || "Untitled NFT"
+    const nftDescription = metadata.nft_description || metadata.description || ""
+    const nftSymbol = metadata.symbol || "XENO"
     const productUrl =
       metadata.product_url || metadata.external_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`
     let royaltyPercentage = 0
@@ -529,28 +529,7 @@ export default async function handler(req, res) {
 
     console.log(`🔢 FINAL collectionNumber: ${collectionNumber}`)
 
-    if (metadata.nft_name) {
-      nftName = metadata.nft_name
-      console.log(`🏷️ Using custom NFT name from nft_name field: "${nftName}"`)
-    } else if (metadata.name) {
-      nftName = metadata.name
-      console.log(`🏷️ No nft_name field, using product name: "${nftName}"`)
-    } else {
-      console.log(`🏷️ No name provided, using default: "${nftName}"`)
-    }
-
     console.log(`🏷️ FINAL nftName: "${nftName}"`)
-
-    if (metadata.nft_description) {
-      nftDescription = metadata.nft_description
-      console.log(`📝 Using custom description from nft_description field: "${nftDescription}"`)
-    } else if (metadata.description) {
-      nftDescription = metadata.description
-      console.log(`📝 No nft_description field, using product description: "${nftDescription}"`)
-    } else {
-      console.log(`📝 No description provided, using default: "${nftDescription}"`)
-    }
-
     console.log(`📝 FINAL nftDescription: "${nftDescription}"`)
     console.log(`🔗 FINAL productUrl (external_url): "${productUrl}"`)
 
