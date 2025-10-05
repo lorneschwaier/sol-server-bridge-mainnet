@@ -535,11 +535,14 @@ export default async function handler(req, res) {
 
     const finalMetadata = {
       name: nftName,
-      symbol: nftSymbol,
       description: nftDescription,
       image: finalImageUrl,
-      external_url: productUrl,
-      seller_fee_basis_points: royaltyPercentage * 100,
+      external_url: productUrl, // keep for backwards compatibility
+      links: {
+        external_url: productUrl,
+        website: productUrl,
+      },
+      seller_fee_basis_points: Math.round((royaltyPercentage || 0) * 100),
       attributes: [
         ...(collectionNumber
           ? [
