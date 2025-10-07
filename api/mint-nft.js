@@ -251,6 +251,7 @@ async function mintNFTWithCore(
   creatorUmi,
   makeImmutable = true,
   royaltyPercentage = 0,
+  collectionAddress = null, // Added collection address parameter
 ) {
   try {
     if (!creatorUmi) {
@@ -263,6 +264,9 @@ async function mintNFTWithCore(
     console.log("🏷️ NFT Name:", metadata.name)
     console.log("🔒 Make Immutable:", makeImmutable)
     console.log("💰 Royalty Percentage:", royaltyPercentage + "%")
+    if (collectionAddress) {
+      console.log("🗂️ Collection Address:", collectionAddress)
+    }
 
     console.log("🔗 Finding working RPC connection...")
     const workingConnection = await getWorkingRPCConnection()
@@ -319,9 +323,22 @@ async function mintNFTWithCore(
       console.log("⚠️ Skipping royalties plugin (0% royalty)")
     }
 
+    if (collectionAddress) {
+      try {
+        const collectionPublicKey = publicKey(collectionAddress)
+        plugins.push({
+          type: "Collection",
+          collection: collectionPublicKey,
+        })
+        console.log("✅ Added collection plugin with address:", collectionAddress)
+      } catch (error) {
+        console.error("❌ Invalid collection address:", collectionAddress, error.message)
+      }
+    }
+
     const createInstruction = create(creatorUmi, {
       asset,
-      name: metadata.name, // Removed "Matrix NFT" fallback - use metadata.name directly
+      name: metadata.name,
       uri: metadataUrl,
       owner: publicKey(walletAddress),
       ...(plugins.length > 0 && { plugins }),
@@ -400,34 +417,25 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== "POST") {
-    return res.status(405).json({ success: false, error: "Method not allowed" })
+    return res.status(405).json({ error: "Method not allowed" })
   }
 
   try {
-    const { walletAddress, metadata, makeImmutable = true } = req.body
+    const { walletAddress, metadata, makeImmutable = true, usePinataUpload: rawUsePinataUpload = false } = req.body
 
-    console.log("🎨 === REAL NFT MINTING REQUEST (CORE) ===")
-    console.log("👤 Wallet:", walletAddress)
-    console.log("🔒 Make Immutable:", makeImmutable)
-    console.log("📋 === WORDPRESS METADATA DEBUG ===")
-    console.log("metadata.collection_number:", metadata.collection_number)
-    console.log("metadata.product_id:", metadata.product_id)
-    console.log("metadata.name:", metadata.name)
-    console.log("metadata.nft_name:", metadata.nft_name)
-    console.log("metadata.description:", metadata.description)
-    console.log("metadata.nft_description:", metadata.nft_description)
-    console.log("metadata.royalty_percentage:", metadata.royalty_percentage)
-    console.log("metadata.royalty:", metadata.royalty)
-    console.log("metadata.royalties:", metadata.royalties)
-    console.log("metadata.symbol:", metadata.symbol)
-    console.log("metadata.image:", metadata.image)
-    console.log("metadata.product_url:", metadata.product_url)
-    console.log("metadata.product_slug:", metadata.product_slug)
-    console.log("Full metadata keys:", Object.keys(metadata))
-    console.log("Full metadata:", JSON.stringify(metadata, null, 2))
-    console.log("=================================")
-    console.log("🔑 Creator private key from Vercel env:", CREATOR_PRIVATE_KEY ? "Yes" : "No")
-    console.log("🏗️ Image hosting method: WordPress media library (x1xo.com)")
+    // Convert to boolean explicitly (handles "true", "1", true, 1, etc.)
+    const usePinataUpload = Boolean(
+      rawUsePinataUpload === true ||
+        rawUsePinataUpload === "true" ||
+        rawUsePinataUpload === 1 ||
+        rawUsePinataUpload === "1",
+    )
+
+    console.log("🔍 === PINATA UPLOAD PARAMETER DEBUG ===")
+    console.log("Raw usePinataUpload from request:", rawUsePinataUpload)
+    console.log("Raw usePinataUpload type:", typeof rawUsePinataUpload)
+    console.log("Converted usePinataUpload (boolean):", usePinataUpload)
+    console.log("========================================")
 
     if (!walletAddress || !metadata || !CREATOR_PRIVATE_KEY) {
       return res.status(400).json({
@@ -486,8 +494,13 @@ export default async function handler(req, res) {
       })
     }
 
-    const finalImageUrl = metadata.image // Use WordPress media URL directly
-    console.log("✅ Using WordPress media URL:", finalImageUrl)
+    const finalImageUrl = usePinataUpload ? imageUploadResult.url : metadata.image
+    console.log("🔍 === IMAGE URL SELECTION ===")
+    console.log("usePinataUpload:", usePinataUpload)
+    console.log("Pinata IPFS URL:", imageUploadResult.url)
+    console.log("WordPress Media URL:", metadata.image)
+    console.log("SELECTED finalImageUrl:", finalImageUrl)
+    console.log("===============================")
 
     let collectionNumber = null
     const nftName = metadata.nft_name || metadata.name || `NFT #${metadata.product_id || Date.now()}`
@@ -495,43 +508,15 @@ export default async function handler(req, res) {
     const nftSymbol = metadata.symbol || "XENO"
     const productUrl =
       metadata.product_url || metadata.external_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`
-    let royaltyPercentage = 0
-
-    if (metadata.royalty_percentage) {
-      royaltyPercentage = Number.parseFloat(metadata.royalty_percentage) || 0
-      console.log(`💰 Using royalty percentage from metadata.royalty_percentage: ${royaltyPercentage}%`)
-    } else if (metadata.royalty) {
-      royaltyPercentage = Number.parseFloat(metadata.royalty) || 0
-      console.log(`💰 Using royalty percentage from metadata.royalty: ${royaltyPercentage}%`)
-    } else if (metadata.royalties) {
-      royaltyPercentage = Number.parseFloat(metadata.royalties) || 0
-      console.log(`💰 Using royalty percentage from metadata.royalties: ${royaltyPercentage}%`)
-    } else {
-      console.log(`⚠️ No royalty percentage provided, using default: ${royaltyPercentage}%`)
-    }
-
-    console.log(`💰 FINAL royaltyPercentage variable: ${royaltyPercentage}%`)
+    const royaltyPercentage = 0
 
     if (metadata.collection_number) {
       collectionNumber = Number.parseInt(metadata.collection_number) || null
       console.log(`🔢 Using manual collection number: ${collectionNumber}`)
-    } else if (metadata.name) {
-      const match = metadata.name.match(/#0*(\d+)/)
-      if (match && match[1]) {
-        collectionNumber = Number.parseInt(match[1]) || null
-        console.log(`🔢 Extracted collection number from name "${metadata.name}": ${collectionNumber}`)
-      } else {
-        console.log(`🔢 No # found in name "${metadata.name}", collection number will not be added`)
-      }
-    } else {
-      console.log(`🔢 No name provided, collection number will not be added`)
     }
 
     console.log(`🔢 FINAL collectionNumber: ${collectionNumber}`)
-
     console.log(`🏷️ FINAL nftName: "${nftName}"`)
-    console.log(`📝 FINAL nftDescription: "${nftDescription}"`)
-    console.log(`🔗 FINAL productUrl (external_url): "${productUrl}"`)
 
     const finalMetadata = {
       name: nftName,
@@ -552,9 +537,14 @@ export default async function handler(req, res) {
               },
             ]
           : []),
+        {
+          trait_type: "Symbol",
+          value: nftSymbol,
+        },
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
+        { trait_type: "Storage", value: usePinataUpload ? "IPFS (Pinata)" : "WordPress Media" },
       ],
       properties: {
         files: [
@@ -604,6 +594,7 @@ export default async function handler(req, res) {
       creatorUmi,
       false,
       royaltyPercentage,
+      metadata.collection_address || null, // Pass collection address from metadata
     )
 
     if (!mintResult.success) {
@@ -628,6 +619,7 @@ export default async function handler(req, res) {
       isImmutable: mintResult.isImmutable,
       collectionNumber: collectionNumber,
       royaltyPercentage: royaltyPercentage,
+      storageType: usePinataUpload ? "ipfs" : "wordpress",
       message: "NFT minted successfully! Check Phantom wallet in 15-30 minutes.",
     })
   } catch (error) {
