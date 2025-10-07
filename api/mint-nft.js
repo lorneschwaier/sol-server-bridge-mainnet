@@ -423,19 +423,13 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata, makeImmutable = true, usePinataUpload: rawUsePinataUpload = false } = req.body
 
-    // Convert to boolean explicitly (handles "true", "1", true, 1, etc.)
-    const usePinataUpload = Boolean(
-      rawUsePinataUpload === true ||
-        rawUsePinataUpload === "true" ||
-        rawUsePinataUpload === 1 ||
-        rawUsePinataUpload === "1",
-    )
+    const usePinataUpload = true // HARDCODED TO ALWAYS USE PINATA
 
     console.log("🔍 === PINATA UPLOAD PARAMETER DEBUG (SERVER) ===")
     console.log("Full request body:", JSON.stringify(req.body, null, 2))
     console.log("Raw usePinataUpload from request:", rawUsePinataUpload)
     console.log("Raw usePinataUpload type:", typeof rawUsePinataUpload)
-    console.log("Converted usePinataUpload (boolean):", usePinataUpload)
+    console.log("FORCED usePinataUpload (boolean):", usePinataUpload)
     console.log("=================================================")
 
     if (!walletAddress || !metadata || !CREATOR_PRIVATE_KEY) {
