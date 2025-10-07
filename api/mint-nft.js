@@ -431,11 +431,12 @@ export default async function handler(req, res) {
         rawUsePinataUpload === "1",
     )
 
-    console.log("🔍 === PINATA UPLOAD PARAMETER DEBUG ===")
+    console.log("🔍 === PINATA UPLOAD PARAMETER DEBUG (SERVER) ===")
+    console.log("Full request body:", JSON.stringify(req.body, null, 2))
     console.log("Raw usePinataUpload from request:", rawUsePinataUpload)
     console.log("Raw usePinataUpload type:", typeof rawUsePinataUpload)
     console.log("Converted usePinataUpload (boolean):", usePinataUpload)
-    console.log("========================================")
+    console.log("=================================================")
 
     if (!walletAddress || !metadata || !CREATOR_PRIVATE_KEY) {
       return res.status(400).json({
@@ -495,12 +496,13 @@ export default async function handler(req, res) {
     }
 
     const finalImageUrl = usePinataUpload ? imageUploadResult.url : metadata.image
-    console.log("🔍 === IMAGE URL SELECTION ===")
-    console.log("usePinataUpload:", usePinataUpload)
-    console.log("Pinata IPFS URL:", imageUploadResult.url)
-    console.log("WordPress Media URL:", metadata.image)
+    console.log("🔍 === IMAGE URL SELECTION DEBUG ===")
+    console.log("usePinataUpload flag:", usePinataUpload)
+    console.log("Pinata IPFS URL (imageUploadResult.url):", imageUploadResult.url)
+    console.log("WordPress Media URL (metadata.image):", metadata.image)
     console.log("SELECTED finalImageUrl:", finalImageUrl)
-    console.log("===============================")
+    console.log("Will use:", usePinataUpload ? "PINATA IPFS" : "WORDPRESS MEDIA")
+    console.log("====================================")
 
     let collectionNumber = null
     const nftName = metadata.nft_name || metadata.name || `NFT #${metadata.product_id || Date.now()}`
@@ -508,7 +510,7 @@ export default async function handler(req, res) {
     const nftSymbol = metadata.symbol || "XENO"
     const productUrl =
       metadata.product_url || metadata.external_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`
-    const royaltyPercentage = 0
+    const royaltyPercentage = Number(metadata.royalty_percentage) || 0
 
     if (metadata.collection_number) {
       collectionNumber = Number.parseInt(metadata.collection_number) || null
@@ -517,6 +519,8 @@ export default async function handler(req, res) {
 
     console.log(`🔢 FINAL collectionNumber: ${collectionNumber}`)
     console.log(`🏷️ FINAL nftName: "${nftName}"`)
+    console.log(`💰 FINAL royaltyPercentage: ${royaltyPercentage}%`)
+    console.log(`🔗 FINAL productUrl: ${productUrl}`)
 
     const finalMetadata = {
       name: nftName,
