@@ -379,21 +379,27 @@ export default async function handler(req, res) {
     }
 
     // Step 1: Upload WordPress image to IPFS for Phantom wallet compatibility
-    console.log("📸 Step 1: Uploading image to IPFS for wallet compatibility...")
-    const imageUploadResult = await uploadImageToPinata(metadata.image)
+    let finalImageUrl = metadata.image // Default to WordPress URL
 
-    if (!imageUploadResult.success) {
-      return res.status(500).json({
-        success: false,
-        error: "Failed to upload image: " + imageUploadResult.error,
-      })
+    if (usePinataUpload) {
+      console.log("📸 Uploading image to Pinata IPFS...")
+      const imageUploadResult = await uploadImageToPinata(metadata.image)
+
+      if (!imageUploadResult.success) {
+        return res.status(500).json({
+          success: false,
+          error: "Failed to upload image: " + imageUploadResult.error,
+        })
+      }
+
+      finalImageUrl = imageUploadResult.url
+      console.log("✅ Image uploaded to Pinata:", finalImageUrl)
+    } else {
+      console.log("📸 Using WordPress Media URL:", finalImageUrl)
     }
 
-    const finalImageUrl = usePinataUpload ? imageUploadResult.url : metadata.image
     console.log("🔍 === IMAGE URL SELECTION DEBUG ===")
     console.log("usePinataUpload flag:", usePinataUpload)
-    console.log("Pinata IPFS URL (imageUploadResult.url):", imageUploadResult.url)
-    console.log("WordPress Media URL (metadata.image):", metadata.image)
     console.log("SELECTED finalImageUrl:", finalImageUrl)
     console.log("Will use:", usePinataUpload ? "PINATA IPFS" : "WORDPRESS MEDIA")
     console.log("====================================")
