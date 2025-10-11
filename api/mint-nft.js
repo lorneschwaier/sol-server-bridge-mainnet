@@ -421,14 +421,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { walletAddress, metadata, makeImmutable = true, usePinataUpload: rawUsePinataUpload = true } = req.body
-
-    const usePinataUpload = Boolean(rawUsePinataUpload)
+    const { walletAddress, metadata, makeImmutable = true, usePinataUpload = false } = req.body
 
     console.log("🔍 === PINATA UPLOAD PARAMETER DEBUG (SERVER) ===")
-    console.log("Raw usePinataUpload from request:", rawUsePinataUpload)
-    console.log("Raw usePinataUpload type:", typeof rawUsePinataUpload)
-    console.log("Final usePinataUpload (boolean):", usePinataUpload)
+    console.log("Full request body:", JSON.stringify(req.body, null, 2))
+    console.log("usePinataUpload from request:", usePinataUpload)
+    console.log("usePinataUpload type:", typeof usePinataUpload)
     console.log("Storage mode:", usePinataUpload ? "PINATA IPFS" : "WORDPRESS MEDIA")
     console.log("=================================================")
 
