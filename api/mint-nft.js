@@ -178,14 +178,21 @@ async function uploadImageToPinata(imageUrl) {
       }
     }
 
-    const imageIpfsUrl = `https://gateway.pinata.cloud/ipfs/${pinataResponse.data.IpfsHash}`
-    console.log("✅ Image uploaded to IPFS:", imageIpfsUrl)
+    const ipfsHash = pinataResponse.data.IpfsHash
+    const imageIpfsUrl = `https://ipfs.io/ipfs/${ipfsHash}`
+    const pinataGateway = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`
+
+    console.log("✅ Image uploaded to IPFS")
+    console.log("   Primary URL (ipfs.io):", imageIpfsUrl)
+    console.log("   Backup URL (Pinata):", pinataGateway)
+    console.log("   IPFS Hash:", ipfsHash)
 
     return {
       success: true,
-      url: imageIpfsUrl,
-      cid: pinataResponse.data.IpfsHash,
+      url: imageIpfsUrl, // Return ipfs.io gateway URL
+      cid: ipfsHash,
       service: "pinata",
+      alternateUrls: [pinataGateway, `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`],
     }
   } catch (error) {
     console.error("❌ Image upload failed:", error.message)
@@ -223,14 +230,21 @@ async function uploadToPinata(metadata) {
       },
     )
 
-    const metadataUrl = `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`
-    console.log("✅ Metadata uploaded to Pinata:", metadataUrl)
+    const ipfsHash = response.data.IpfsHash
+    const metadataUrl = `https://ipfs.io/ipfs/${ipfsHash}` // Use ipfs.io gateway as primary
+    const pinataGateway = `https://gateway.pinata.cloud/ipfs/${ipfsHash}` // Keep Pinata as backup
+
+    console.log("✅ Metadata uploaded to IPFS")
+    console.log("   Primary URL (ipfs.io):", metadataUrl)
+    console.log("   Backup URL (Pinata):", pinataGateway)
+    console.log("   IPFS Hash:", ipfsHash)
 
     return {
       success: true,
-      url: metadataUrl,
-      cid: response.data.IpfsHash,
+      url: metadataUrl, // Return ipfs.io gateway URL
+      cid: ipfsHash,
       service: "pinata",
+      alternateUrls: [pinataGateway, `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`],
     }
   } catch (error) {
     console.error("❌ Pinata upload failed:", error.message)
