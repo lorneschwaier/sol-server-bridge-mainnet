@@ -394,11 +394,10 @@ export default async function handler(req, res) {
     return
   }
 
-  // Set CORS headers - FIXED FOR YOUR WEBSITE
-  res.setHeader("Access-Control-Allow-Origin", "https://x1xo.com")
+  res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
-  res.setHeader("Access-Control-Allow-Credentials", "true")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  res.setHeader("Access-Control-Allow-Credentials", "false")
 
   if (req.method === "OPTIONS") {
     res.status(200).end()
