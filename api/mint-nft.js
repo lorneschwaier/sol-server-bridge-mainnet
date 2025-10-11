@@ -66,17 +66,30 @@ async function uploadImageToPinata(imageUrl) {
     console.log("📤 Uploading image to Pinata IPFS...")
     console.log("🖼️ Image URL:", imageUrl)
 
+    // Fetch the image
     const response = await fetch(imageUrl)
     if (!response.ok) {
       throw new Error(`Failed to fetch image: ${response.statusText}`)
     }
 
+    // Get the image as a buffer
     const imageBuffer = await response.arrayBuffer()
-    const blob = new Blob([imageBuffer])
 
+    // Get the content type from the response
+    const contentType = response.headers.get("content-type") || "image/jpeg"
+
+    // Determine file extension from content type
+    const extension = contentType.split("/")[1] || "jpg"
+    const filename = `nft-image.${extension}`
+
+    // Create a Blob with the correct content type
+    const blob = new Blob([imageBuffer], { type: contentType })
+
+    // Create FormData and append the file
     const data = new FormData()
-    data.append("file", blob, "nft-image.jpg")
+    data.append("file", blob, filename)
 
+    // Upload to Pinata
     const pinataResponse = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
       method: "POST",
       headers: {
@@ -103,10 +116,7 @@ async function uploadImageToPinata(imageUrl) {
     }
   } catch (error) {
     console.error("❌ Pinata image upload error:", error)
-    return {
-      success: false,
-      error: error.message,
-    }
+    throw new Error(`Failed to upload image: ${error.message}`)
   }
 }
 
