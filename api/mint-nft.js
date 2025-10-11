@@ -7,13 +7,12 @@ import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
 import { create, mplCore, fetchAsset } from "@metaplex-foundation/mpl-core"
 import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
-import axios from "axios"
 import bs58 from "bs58"
 import FormData from "form-data"
 
 // Environment variables
 const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
-
+const PINATA_JWT = process.env.PINATA_JWT // Added PINATA_JWT variable
 const RPC_ENDPOINTS = [
   process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
   "https://solana-api.projectserum.com",
@@ -64,142 +63,49 @@ const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY // Declare the creat
 // Upload image to Pinata IPFS
 async function uploadImageToPinata(imageUrl) {
   try {
-    if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
-      throw new Error("Pinata API credentials not configured")
+    console.log("📤 Uploading image to Pinata IPFS...")
+    console.log("🖼️ Image URL:", imageUrl)
+
+    const response = await fetch(imageUrl)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.statusText}`)
     }
 
-    console.log("📥 Downloading image from:", imageUrl)
+    const imageBuffer = await response.arrayBuffer()
+    const blob = new Blob([imageBuffer])
 
-    let imageBuffer = null
-    const downloadAttempts = [
-      // Attempt 1: Direct fetch with browser headers
-      async () => {
-        const response = await fetch(imageUrl, {
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            Accept: "image/*,*/*",
-            Referer: "https://x1xo.com/",
-            "Cache-Control": "no-cache",
-          },
-          timeout: 30000,
-        })
-        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-        return Buffer.from(await response.arrayBuffer())
+    const data = new FormData()
+    data.append("file", blob, "nft-image.jpg")
+
+    const pinataResponse = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${PINATA_JWT}`,
       },
-      // Attempt 2: Axios with different headers
-      async () => {
-        const response = await axios.get(imageUrl, {
-          responseType: "arraybuffer",
-          headers: {
-            "User-Agent": "Mozilla/5.0 (compatible; NFTBot/1.0)",
-            Accept: "image/*",
-          },
-          timeout: 30000,
-        })
-        return Buffer.from(response.data)
-      },
-      // Attempt 3: Simple fetch without special headers
-      async () => {
-        const response = await fetch(imageUrl, { timeout: 30000 })
-        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-        return Buffer.from(await response.arrayBuffer())
-      },
-    ]
-
-    for (let i = 0; i < downloadAttempts.length; i++) {
-      try {
-        console.log(`📥 Download attempt ${i + 1}/${downloadAttempts.length}`)
-        imageBuffer = await downloadAttempts[i]()
-        console.log(`✅ Image downloaded successfully (${imageBuffer.length} bytes)`)
-        break
-      } catch (error) {
-        console.log(`❌ Download attempt ${i + 1} failed:`, error.message)
-        if (i === downloadAttempts.length - 1) {
-          throw error
-        }
-      }
-    }
-
-    if (!imageBuffer) {
-      throw new Error("Failed to download image after all attempts")
-    }
-
-    // Get file extension from URL or content type
-    let fileExtension = "png"
-    if (imageUrl.includes(".jpg") || imageUrl.includes(".jpeg")) {
-      fileExtension = "jpg"
-    } else if (imageUrl.includes(".gif")) {
-      fileExtension = "gif"
-    } else if (imageUrl.includes(".webp")) {
-      fileExtension = "webp"
-    }
-
-    // Create form data for Pinata
-    const form = new FormData()
-
-    form.append("file", imageBuffer, {
-      filename: `nft-image-${Date.now()}.${fileExtension}`,
-      contentType: `image/${fileExtension}`,
+      body: data,
     })
 
-    form.append(
-      "pinataMetadata",
-      JSON.stringify({
-        name: `nft-image-${Date.now()}.${fileExtension}`,
-      }),
-    )
-
-    console.log("📤 Uploading image to Pinata IPFS...")
-
-    let pinataResponse = null
-    const maxRetries = 3
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`📤 Pinata upload attempt ${attempt}/${maxRetries}`)
-        pinataResponse = await axios.post("https://api.pinata.cloud/pinning/pinFileToIPFS", form, {
-          headers: {
-            ...form.getHeaders(),
-            pinata_api_key: PINATA_API_KEY,
-            pinata_secret_api_key: PINATA_SECRET_KEY,
-          },
-          timeout: 60000,
-        })
-        console.log(`✅ Pinata upload successful on attempt ${attempt}`)
-        break
-      } catch (error) {
-        console.log(`❌ Pinata upload attempt ${attempt} failed:`, error.message)
-        if (attempt === maxRetries) {
-          throw error
-        }
-        // Wait before retry
-        await new Promise((resolve) => setTimeout(resolve, 2000 * attempt))
-      }
+    if (!pinataResponse.ok) {
+      const errorText = await pinataResponse.text()
+      throw new Error(`Pinata upload failed: ${errorText}`)
     }
 
-    const ipfsHash = pinataResponse.data.IpfsHash
-    const imageIpfsUrl = `https://ipfs.io/ipfs/${ipfsHash}`
-    const pinataGateway = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`
+    const result = await pinataResponse.json()
+    const ipfsUrl = `https://gateway.pinata.cloud/ipfs/${result.IpfsHash}`
 
-    console.log("✅ Image uploaded to IPFS")
-    console.log("   Primary URL (ipfs.io):", imageIpfsUrl)
-    console.log("   Backup URL (Pinata):", pinataGateway)
-    console.log("   IPFS Hash:", ipfsHash)
+    console.log("✅ Image uploaded to Pinata IPFS")
+    console.log("🔗 IPFS URL:", ipfsUrl)
 
     return {
       success: true,
-      url: imageIpfsUrl, // Return ipfs.io gateway URL
-      cid: ipfsHash,
-      service: "pinata",
-      alternateUrls: [pinataGateway, `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`],
+      url: ipfsUrl,
+      ipfsHash: result.IpfsHash,
     }
   } catch (error) {
-    console.error("❌ Image upload failed:", error.message)
+    console.error("❌ Pinata image upload error:", error)
     return {
       success: false,
       error: error.message,
-      service: "pinata",
     }
   }
 }
@@ -207,51 +113,44 @@ async function uploadImageToPinata(imageUrl) {
 // Upload metadata to Pinata
 async function uploadToPinata(metadata) {
   try {
-    if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
-      throw new Error("Pinata API credentials not configured")
-    }
+    console.log("📤 Uploading metadata to Pinata IPFS...")
 
-    console.log("📤 Uploading metadata to Pinata...")
-
-    const response = await axios.post(
-      "https://api.pinata.cloud/pinning/pinJSONToIPFS",
-      {
+    const pinataResponse = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${PINATA_JWT}`,
+      },
+      body: JSON.stringify({
         pinataContent: metadata,
         pinataMetadata: {
-          name: `nft-metadata-${Date.now()}.json`,
+          name: `${metadata.name}-metadata.json`,
         },
-      },
-      {
-        headers: {
-          pinata_api_key: PINATA_API_KEY,
-          pinata_secret_api_key: PINATA_SECRET_KEY,
-        },
-        timeout: 30000,
-      },
-    )
+      }),
+    })
 
-    const ipfsHash = response.data.IpfsHash
-    const metadataUrl = `https://ipfs.io/ipfs/${ipfsHash}` // Use ipfs.io gateway as primary
-    const pinataGateway = `https://gateway.pinata.cloud/ipfs/${ipfsHash}` // Keep Pinata as backup
+    if (!pinataResponse.ok) {
+      const errorText = await pinataResponse.text()
+      throw new Error(`Pinata upload failed: ${errorText}`)
+    }
 
-    console.log("✅ Metadata uploaded to IPFS")
-    console.log("   Primary URL (ipfs.io):", metadataUrl)
-    console.log("   Backup URL (Pinata):", pinataGateway)
-    console.log("   IPFS Hash:", ipfsHash)
+    const result = await pinataResponse.json()
+    const metadataUrl = `https://gateway.pinata.cloud/ipfs/${result.IpfsHash}`
+
+    console.log("✅ Metadata uploaded to Pinata IPFS")
+    console.log("🔗 Metadata URL:", metadataUrl)
+    console.log("📋 IPFS Hash:", result.IpfsHash)
 
     return {
       success: true,
-      url: metadataUrl, // Return ipfs.io gateway URL
-      cid: ipfsHash,
-      service: "pinata",
-      alternateUrls: [pinataGateway, `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`],
+      url: metadataUrl,
+      ipfsHash: result.IpfsHash,
     }
   } catch (error) {
-    console.error("❌ Pinata upload failed:", error.message)
+    console.error("❌ Pinata metadata upload error:", error)
     return {
       success: false,
       error: error.message,
-      service: "pinata",
     }
   }
 }
