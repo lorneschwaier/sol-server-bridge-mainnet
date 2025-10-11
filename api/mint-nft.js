@@ -4,11 +4,12 @@ globalThis.Buffer = Buffer
 
 import { Connection, PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
-import { create, mplCore, fetchAsset } from "@metaplex-foundation/mpl-core"
-import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
-import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
-import FormData from "form-data"
+import { create, mplCore, fetchAssetV1 } from "@metaplex-foundation/mpl-core"
+import { keypairIdentity, generateSigner } from "@metaplex-foundation/umi"
+import { fromWeb3JsKeypair, publicKey } from "@metaplex-foundation/umi-web3js-adapters"
+import bs58 from "bs58"
 import axios from "axios"
+import FormData from "form-data"
 
 // Environment variables
 const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
@@ -353,7 +354,7 @@ async function mintNFTWithCore(
     console.log("🔄 Verifying asset is properly indexed...")
     try {
       const umi = createUmi(RPC_ENDPOINTS[0]).use(mplCore())
-      const fetchedAsset = await fetchAsset(umi, asset.publicKey)
+      const fetchedAsset = await fetchAssetV1(umi, asset.publicKey)
       console.log("✅ Asset confirmed and indexed:", fetchedAsset.publicKey)
       console.log("🎨 Asset name:", fetchedAsset.name)
       console.log("📋 Asset URI:", fetchedAsset.uri)
@@ -435,7 +436,7 @@ export default async function handler(req, res) {
       if (CREATOR_PRIVATE_KEY.startsWith("[")) {
         privateKeyArray = JSON.parse(CREATOR_PRIVATE_KEY)
       } else {
-        privateKeyArray = Array.from(Buffer.from(CREATOR_PRIVATE_KEY, "base58"))
+        privateKeyArray = Array.from(bs58.decode(CREATOR_PRIVATE_KEY))
       }
 
       creatorKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray))
