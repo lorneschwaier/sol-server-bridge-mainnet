@@ -323,18 +323,7 @@ async function mintNFTWithCore(
       console.log("⚠️ Skipping royalties plugin (0% royalty)")
     }
 
-    if (collectionAddress) {
-      try {
-        const collectionPublicKey = publicKey(collectionAddress)
-        plugins.push({
-          type: "Collection",
-          collection: collectionPublicKey,
-        })
-        console.log("✅ Added collection plugin with address:", collectionAddress)
-      } catch (error) {
-        console.error("❌ Invalid collection address:", collectionAddress, error.message)
-      }
-    }
+    // Collection metadata is handled in the JSON metadata, not as a plugin
 
     const createInstruction = create(creatorUmi, {
       asset,
