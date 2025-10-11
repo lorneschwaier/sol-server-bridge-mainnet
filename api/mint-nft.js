@@ -410,7 +410,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { walletAddress, metadata, makeImmutable = true, usePinataUpload = false } = req.body
+    const { walletAddress, metadata, makeImmutable = true, usePinataUpload = true } = req.body
 
     console.log("🔍 === PINATA UPLOAD PARAMETER DEBUG (SERVER) ===")
     console.log("Full request body:", JSON.stringify(req.body, null, 2))
