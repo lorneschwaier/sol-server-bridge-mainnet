@@ -519,6 +519,7 @@ export default async function handler(req, res) {
       name: nftName,
       description: nftDescription,
       image: finalImageUrl,
+      external_url: "https://x1xo.com",
       seller_fee_basis_points: Math.round((royaltyPercentage || 0) * 100),
       attributes: [
         ...(collectionNumber
