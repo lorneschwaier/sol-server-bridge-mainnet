@@ -4,16 +4,16 @@ globalThis.Buffer = Buffer
 
 import { Connection, PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
-import { create, mplCore, fetchAssetV1 } from "@metaplex-foundation/mpl-core"
+import { create, mplCore, fetchAsset } from "@metaplex-foundation/mpl-core"
 import { keypairIdentity, generateSigner, publicKey } from "@metaplex-foundation/umi"
 import { fromWeb3JsKeypair } from "@metaplex-foundation/umi-web3js-adapters"
-import bs58 from "bs58"
 import axios from "axios"
+import bs58 from "bs58"
 import FormData from "form-data"
 
 // Environment variables
 const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
-const PINATA_JWT = process.env.PINATA_JWT // Added PINATA_JWT variable
+
 const RPC_ENDPOINTS = [
   process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
   "https://solana-api.projectserum.com",
@@ -323,7 +323,18 @@ async function mintNFTWithCore(
       console.log("⚠️ Skipping royalties plugin (0% royalty)")
     }
 
-    // Collection metadata is handled in the JSON metadata, not as a plugin
+    if (collectionAddress) {
+      try {
+        const collectionPublicKey = publicKey(collectionAddress)
+        plugins.push({
+          type: "Collection",
+          collection: collectionPublicKey,
+        })
+        console.log("✅ Added collection plugin with address:", collectionAddress)
+      } catch (error) {
+        console.error("❌ Invalid collection address:", collectionAddress, error.message)
+      }
+    }
 
     const createInstruction = create(creatorUmi, {
       asset,
@@ -354,7 +365,7 @@ async function mintNFTWithCore(
     console.log("🔄 Verifying asset is properly indexed...")
     try {
       const umi = createUmi(RPC_ENDPOINTS[0]).use(mplCore())
-      const fetchedAsset = await fetchAssetV1(umi, asset.publicKey)
+      const fetchedAsset = await fetchAsset(umi, asset.publicKey)
       console.log("✅ Asset confirmed and indexed:", fetchedAsset.publicKey)
       console.log("🎨 Asset name:", fetchedAsset.name)
       console.log("📋 Asset URI:", fetchedAsset.uri)
@@ -394,10 +405,11 @@ export default async function handler(req, res) {
     return
   }
 
-  res.setHeader("Access-Control-Allow-Origin", "*")
+  // Set CORS headers - FIXED FOR YOUR WEBSITE
+  res.setHeader("Access-Control-Allow-Origin", "https://x1xo.com")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
-  res.setHeader("Access-Control-Allow-Credentials", "false")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+  res.setHeader("Access-Control-Allow-Credentials", "true")
 
   if (req.method === "OPTIONS") {
     res.status(200).end()
@@ -409,13 +421,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { walletAddress, metadata, makeImmutable = true, usePinataUpload = false } = req.body
+    const { walletAddress, metadata, makeImmutable = true, usePinataUpload: rawUsePinataUpload = false } = req.body
+
+    const usePinataUpload = true // HARDCODED TO ALWAYS USE PINATA
 
     console.log("🔍 === PINATA UPLOAD PARAMETER DEBUG (SERVER) ===")
     console.log("Full request body:", JSON.stringify(req.body, null, 2))
-    console.log("usePinataUpload from request:", usePinataUpload)
-    console.log("usePinataUpload type:", typeof usePinataUpload)
-    console.log("Storage mode:", usePinataUpload ? "PINATA IPFS" : "WORDPRESS MEDIA")
+    console.log("Raw usePinataUpload from request:", rawUsePinataUpload)
+    console.log("Raw usePinataUpload type:", typeof rawUsePinataUpload)
+    console.log("FORCED usePinataUpload (boolean):", usePinataUpload)
     console.log("=================================================")
 
     if (!walletAddress || !metadata || !CREATOR_PRIVATE_KEY) {
@@ -465,27 +479,21 @@ export default async function handler(req, res) {
     }
 
     // Step 1: Upload WordPress image to IPFS for Phantom wallet compatibility
-    let finalImageUrl = metadata.image // Default to WordPress URL
+    console.log("📸 Step 1: Uploading image to IPFS for wallet compatibility...")
+    const imageUploadResult = await uploadImageToPinata(metadata.image)
 
-    if (usePinataUpload) {
-      console.log("📸 Step 1: Uploading image to IPFS for wallet compatibility...")
-      const imageUploadResult = await uploadImageToPinata(metadata.image)
-
-      if (!imageUploadResult.success) {
-        return res.status(500).json({
-          success: false,
-          error: "Failed to upload image: " + imageUploadResult.error,
-        })
-      }
-
-      finalImageUrl = imageUploadResult.url
-      console.log("✅ Using Pinata IPFS URL:", finalImageUrl)
-    } else {
-      console.log("✅ Using WordPress media URL:", finalImageUrl)
+    if (!imageUploadResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: "Failed to upload image: " + imageUploadResult.error,
+      })
     }
 
+    const finalImageUrl = usePinataUpload ? imageUploadResult.url : metadata.image
     console.log("🔍 === IMAGE URL SELECTION DEBUG ===")
     console.log("usePinataUpload flag:", usePinataUpload)
+    console.log("Pinata IPFS URL (imageUploadResult.url):", imageUploadResult.url)
+    console.log("WordPress Media URL (metadata.image):", metadata.image)
     console.log("SELECTED finalImageUrl:", finalImageUrl)
     console.log("Will use:", usePinataUpload ? "PINATA IPFS" : "WORDPRESS MEDIA")
     console.log("====================================")
