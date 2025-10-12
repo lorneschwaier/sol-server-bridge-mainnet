@@ -178,7 +178,7 @@ async function uploadImageToPinata(imageUrl) {
       }
     }
 
-    const imageIpfsUrl = `https://gateway.pinata.cloud/ipfs/${pinataResponse.data.IpfsHash}`
+    const imageIpfsUrl = `https://ipfs.io/ipfs/${pinataResponse.data.IpfsHash}` // Using ipfs.io gateway instead of gateway.pinata.cloud to avoid rate limits
     console.log("✅ Image uploaded to IPFS:", imageIpfsUrl)
 
     return {
@@ -223,7 +223,7 @@ async function uploadToPinata(metadata) {
       },
     )
 
-    const metadataUrl = `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`
+    const metadataUrl = `https://ipfs.io/ipfs/${response.data.IpfsHash}` // Using ipfs.io gateway instead of gateway.pinata.cloud to avoid rate limits
     console.log("✅ Metadata uploaded to Pinata:", metadataUrl)
 
     return {
