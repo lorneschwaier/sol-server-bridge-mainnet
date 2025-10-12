@@ -423,19 +423,13 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata, makeImmutable = true, usePinataUpload: rawUsePinataUpload = false } = req.body
 
-    // Convert to boolean explicitly (handles "true", "1", true, 1, etc.)
-    const usePinataUpload = Boolean(
-      rawUsePinataUpload === true ||
-        rawUsePinataUpload === "true" ||
-        rawUsePinataUpload === 1 ||
-        rawUsePinataUpload === "1",
-    )
+    const usePinataUpload = true // HARDCODED TO ALWAYS USE PINATA
 
     console.log("🔍 === PINATA UPLOAD PARAMETER DEBUG (SERVER) ===")
     console.log("Full request body:", JSON.stringify(req.body, null, 2))
     console.log("Raw usePinataUpload from request:", rawUsePinataUpload)
     console.log("Raw usePinataUpload type:", typeof rawUsePinataUpload)
-    console.log("Converted usePinataUpload (boolean):", usePinataUpload)
+    console.log("FORCED usePinataUpload (boolean):", usePinataUpload)
     console.log("=================================================")
 
     if (!walletAddress || !metadata || !CREATOR_PRIVATE_KEY) {
@@ -507,9 +501,7 @@ export default async function handler(req, res) {
     let collectionNumber = null
     const nftName = metadata.nft_name || metadata.name || `NFT #${metadata.product_id || Date.now()}`
     const nftDescription = metadata.nft_description || metadata.description || ""
-    const nftSymbol = metadata.symbol || "XENO"
-    const productUrl =
-      metadata.product_url || metadata.external_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`
+    const nftSymbol = metadata.symbol || "X1"
     const royaltyPercentage = Number(metadata.royalty_percentage) || 0
 
     if (metadata.collection_number) {
@@ -520,23 +512,19 @@ export default async function handler(req, res) {
     console.log(`🔢 FINAL collectionNumber: ${collectionNumber}`)
     console.log(`🏷️ FINAL nftName: "${nftName}"`)
     console.log(`💰 FINAL royaltyPercentage: ${royaltyPercentage}%`)
-    console.log(`🔗 FINAL productUrl: ${productUrl}`)
 
-    const finalMetadata = {
+    // Step 2: Upload metadata to Pinata
+    console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
+    const uploadResult = await uploadToPinata({
       name: nftName,
       description: nftDescription,
       image: finalImageUrl,
-      external_url: productUrl, // keep for backwards compatibility
-      links: {
-        external_url: productUrl,
-        website: productUrl,
-      },
       seller_fee_basis_points: Math.round((royaltyPercentage || 0) * 100),
       attributes: [
         ...(collectionNumber
           ? [
               {
-                trait_type: "Collection #",
+                trait_type: "Collection",
                 value: collectionNumber.toString(),
               },
             ]
@@ -545,10 +533,8 @@ export default async function handler(req, res) {
           trait_type: "Symbol",
           value: nftSymbol,
         },
-        { trait_type: "Platform", value: "WordPress" },
-        { trait_type: "Creator", value: "x1xo" },
-        { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
-        { trait_type: "Storage", value: usePinataUpload ? "IPFS (Pinata)" : "WordPress Media" },
+        { trait_type: "Minted", value: new Date().toISOString().split("T")[0] },
+        { trait_type: "Storage", value: "IPFS" },
       ],
       properties: {
         files: [
@@ -573,13 +559,7 @@ export default async function handler(req, res) {
           },
         ],
       },
-    }
-
-    console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
-
-    // Step 2: Upload metadata to Pinata
-    console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
-    const uploadResult = await uploadToPinata(finalMetadata)
+    })
 
     if (!uploadResult.success) {
       return res.status(500).json({
