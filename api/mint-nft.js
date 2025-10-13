@@ -223,7 +223,7 @@ async function uploadToPinata(metadata) {
       },
     )
 
-    const metadataUrl = `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`
+    const metadataUrl = `https://ipfs.io/ipfs/${response.data.IpfsHash}`
     console.log("✅ Metadata uploaded to Pinata:", metadataUrl)
 
     return {
