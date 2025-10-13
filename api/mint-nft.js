@@ -13,7 +13,6 @@ import FormData from "form-data"
 
 // Environment variables
 const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta"
-
 const RPC_ENDPOINTS = [
   process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
   "https://solana-api.projectserum.com",
@@ -21,6 +20,9 @@ const RPC_ENDPOINTS = [
   "https://solana-mainnet.g.alchemy.com/v2/demo",
   "https://api.mainnet-beta.solana.com",
 ]
+const PINATA_API_KEY = process.env.PINATA_API_KEY
+const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
+const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY // Declare the creatorPrivateKey variable
 
 async function getWorkingRPCConnection() {
   for (const rpcUrl of RPC_ENDPOINTS) {
@@ -56,10 +58,6 @@ async function getBalanceWithFallback(publicKey) {
 
 // Initialize Solana connection with first endpoint
 const connection = new Connection(RPC_ENDPOINTS[0], "confirmed")
-
-const PINATA_API_KEY = process.env.PINATA_API_KEY
-const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY
-const CREATOR_PRIVATE_KEY = process.env.CREATOR_PRIVATE_KEY // Declare the creatorPrivateKey variable
 
 // Upload image to Pinata IPFS
 async function uploadImageToPinata(imageUrl) {
@@ -326,11 +324,8 @@ async function mintNFTWithCore(
     if (collectionAddress) {
       try {
         const collectionPublicKey = publicKey(collectionAddress)
-        plugins.push({
-          type: "Collection",
-          collection: collectionPublicKey,
-        })
-        console.log("✅ Added collection plugin with address:", collectionAddress)
+        console.log("ℹ️ Collection address provided:", collectionAddress)
+        console.log("ℹ️ Collection will be added to metadata attributes")
       } catch (error) {
         console.error("❌ Invalid collection address:", collectionAddress, error.message)
       }
@@ -417,20 +412,34 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" })
+    return res.status(405).json({ success: false, error: "Method not allowed" })
   }
 
   try {
-    const { walletAddress, metadata, makeImmutable = true, usePinataUpload: rawUsePinataUpload = true } = req.body
+    const { walletAddress, metadata, makeImmutable = true, usePinataUpload = false } = req.body
 
-    const usePinataUpload = Boolean(rawUsePinataUpload)
-
-    console.log("🔍 === PINATA UPLOAD PARAMETER DEBUG (SERVER) ===")
-    console.log("Raw usePinataUpload from request:", rawUsePinataUpload)
-    console.log("Raw usePinataUpload type:", typeof rawUsePinataUpload)
-    console.log("Final usePinataUpload (boolean):", usePinataUpload)
-    console.log("Storage mode:", usePinataUpload ? "PINATA IPFS" : "WORDPRESS MEDIA")
-    console.log("=================================================")
+    console.log("🎨 === REAL NFT MINTING REQUEST (CORE) ===")
+    console.log("👤 Wallet:", walletAddress)
+    console.log("🔒 Make Immutable:", makeImmutable)
+    console.log("📌 Use Pinata IPFS URL:", usePinataUpload)
+    console.log("📋 === WORDPRESS METADATA DEBUG ===")
+    console.log("metadata.collection_number:", metadata.collection_number)
+    console.log("metadata.collection_name:", metadata.collection_name)
+    console.log("metadata.collection_address:", metadata.collection_address)
+    console.log("metadata.product_id:", metadata.product_id)
+    console.log("metadata.name:", metadata.name)
+    console.log("metadata.nft_name:", metadata.nft_name)
+    console.log("metadata.description:", metadata.description)
+    console.log("metadata.nft_description:", metadata.nft_description)
+    console.log("metadata.royalty_percentage:", metadata.royalty_percentage)
+    console.log("metadata.symbol:", metadata.symbol)
+    console.log("metadata.image:", metadata.image)
+    console.log("metadata.product_url:", metadata.product_url)
+    console.log("metadata.product_slug:", metadata.product_slug)
+    console.log("Full metadata keys:", Object.keys(metadata))
+    console.log("=================================")
+    console.log("🔑 Creator private key from Vercel env:", CREATOR_PRIVATE_KEY ? "Yes" : "No")
+    console.log("🏗️ Image hosting method: WordPress media library (x1xo.com)")
 
     if (!walletAddress || !metadata || !CREATOR_PRIVATE_KEY) {
       return res.status(400).json({
@@ -478,32 +487,29 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 1: Handle image based on storage type
-    let finalImageUrl = metadata.image // Default to WordPress URL
-    let imageUploadResult = null
+    console.log("📸 Step 1: Uploading image to IPFS for wallet compatibility...")
+    const imageUploadResult = await uploadImageToPinata(metadata.image)
 
-    if (usePinataUpload) {
-      console.log("📸 Step 1: Uploading image to Pinata...")
-      imageUploadResult = await uploadImageToPinata(metadata.image)
-
-      if (!imageUploadResult.success) {
-        return res.status(500).json({
-          success: false,
-          error: "Failed to upload image to Pinata: " + imageUploadResult.error,
-        })
-      }
-
-      finalImageUrl = imageUploadResult.url
-      console.log("✅ Using Pinata IPFS URL:", finalImageUrl)
-    } else {
-      console.log("📸 Step 1: Using WordPress media URL directly...")
-      console.log("✅ Using WordPress Media URL:", finalImageUrl)
+    if (!imageUploadResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: "Failed to upload image: " + imageUploadResult.error,
+      })
     }
 
-    console.log("🔍 === IMAGE URL SELECTION DEBUG ===")
-    console.log("usePinataUpload flag:", usePinataUpload)
-    console.log("SELECTED finalImageUrl:", finalImageUrl)
-    console.log("Storage mode:", usePinataUpload ? "PINATA IPFS" : "WORDPRESS MEDIA")
+    const finalImageUrl = usePinataUpload ? imageUploadResult.url : metadata.image
+    console.log(
+      usePinataUpload
+        ? "✅ Using Pinata IPFS URL for decentralized storage:" + finalImageUrl
+        : "✅ Using WordPress media URL for SEO:" + finalImageUrl,
+    )
+
+    console.log("🔍 === PINATA URL SELECTION DEBUG ===")
+    console.log("usePinataUpload parameter:", usePinataUpload)
+    console.log("usePinataUpload type:", typeof usePinataUpload)
+    console.log("imageUploadResult.url:", imageUploadResult.url)
+    console.log("metadata.image (WordPress URL):", metadata.image)
+    console.log("finalImageUrl (selected):", finalImageUrl)
     console.log("====================================")
 
     let collectionNumber = null
@@ -512,8 +518,7 @@ export default async function handler(req, res) {
     const nftSymbol = metadata.symbol || "XENO"
     const productUrl =
       metadata.product_url || metadata.external_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`
-    const royaltyPercentage = Number(metadata.royalty_percentage) || 0
-    const collectionName = metadata.collection_name || ""
+    const royaltyPercentage = 0
 
     if (metadata.collection_number) {
       collectionNumber = Number.parseInt(metadata.collection_number) || null
@@ -522,29 +527,18 @@ export default async function handler(req, res) {
 
     console.log(`🔢 FINAL collectionNumber: ${collectionNumber}`)
     console.log(`🏷️ FINAL nftName: "${nftName}"`)
-    console.log(`💰 FINAL royaltyPercentage: ${royaltyPercentage}%`)
-    console.log(`🔗 FINAL productUrl: ${productUrl}`)
-    console.log(`🗂️ FINAL collectionName: "${collectionName}"`)
 
     const finalMetadata = {
       name: nftName,
       description: nftDescription,
       image: finalImageUrl,
-      external_url: productUrl,
+      external_url: productUrl, // keep for backwards compatibility
       links: {
         external_url: productUrl,
         website: productUrl,
       },
       seller_fee_basis_points: Math.round((royaltyPercentage || 0) * 100),
       attributes: [
-        ...(collectionName
-          ? [
-              {
-                trait_type: "Collection",
-                value: collectionName,
-              },
-            ]
-          : []),
         ...(collectionNumber
           ? [
               {
@@ -587,16 +581,7 @@ export default async function handler(req, res) {
       },
     }
 
-    console.log("📋 === FINAL METADATA DEBUG ===")
-    console.log("Name:", finalMetadata.name)
-    console.log("Description:", finalMetadata.description)
-    console.log("Image URL:", finalMetadata.image)
-    console.log("External URL:", finalMetadata.external_url)
-    console.log("Collection Name:", collectionName || "None")
-    console.log("Collection Number:", collectionNumber || "None")
-    console.log("Royalty %:", royaltyPercentage)
-    console.log("Full metadata:", JSON.stringify(finalMetadata, null, 2))
-    console.log("================================")
+    console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
 
     // Step 2: Upload metadata to Pinata
     console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
@@ -605,7 +590,7 @@ export default async function handler(req, res) {
     if (!uploadResult.success) {
       return res.status(500).json({
         success: false,
-        error: "Failed to upload metadata to Pinata: " + uploadResult.error,
+        error: "Failed to upload metadata: " + uploadResult.error,
       })
     }
 
