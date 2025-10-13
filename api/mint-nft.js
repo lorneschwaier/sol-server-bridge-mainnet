@@ -323,17 +323,12 @@ async function mintNFTWithCore(
       console.log("⚠️ Skipping royalties plugin (0% royalty)")
     }
 
+    // Collections in Metaplex Core need to be verified separately
+    // For now, we'll add collection info to metadata attributes only
     if (collectionAddress) {
-      try {
-        const collectionPublicKey = publicKey(collectionAddress)
-        plugins.push({
-          type: "Collection",
-          collection: collectionPublicKey,
-        })
-        console.log("✅ Added collection plugin with address:", collectionAddress)
-      } catch (error) {
-        console.error("❌ Invalid collection address:", collectionAddress, error.message)
-      }
+      console.log("🗂️ Collection address provided:", collectionAddress)
+      console.log("⚠️ Note: Collection verification requires separate transaction")
+      console.log("📋 Collection info will be added to metadata attributes")
     }
 
     const createInstruction = create(creatorUmi, {
