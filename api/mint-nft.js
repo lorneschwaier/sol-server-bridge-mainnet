@@ -478,24 +478,32 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 1: Upload WordPress image to IPFS for Phantom wallet compatibility
-    console.log("📸 Step 1: Uploading image to IPFS for wallet compatibility...")
-    const imageUploadResult = await uploadImageToPinata(metadata.image)
+    // Step 1: Handle image based on storage type
+    let finalImageUrl = metadata.image // Default to WordPress URL
+    let imageUploadResult = null
 
-    if (!imageUploadResult.success) {
-      return res.status(500).json({
-        success: false,
-        error: "Failed to upload image: " + imageUploadResult.error,
-      })
+    if (usePinataUpload) {
+      console.log("📸 Step 1: Uploading image to Pinata...")
+      imageUploadResult = await uploadImageToPinata(metadata.image)
+
+      if (!imageUploadResult.success) {
+        return res.status(500).json({
+          success: false,
+          error: "Failed to upload image to Pinata: " + imageUploadResult.error,
+        })
+      }
+
+      finalImageUrl = imageUploadResult.url
+      console.log("✅ Using Pinata IPFS URL:", finalImageUrl)
+    } else {
+      console.log("📸 Step 1: Using WordPress media URL directly...")
+      console.log("✅ Using WordPress Media URL:", finalImageUrl)
     }
 
-    const finalImageUrl = usePinataUpload ? imageUploadResult.url : metadata.image
     console.log("🔍 === IMAGE URL SELECTION DEBUG ===")
     console.log("usePinataUpload flag:", usePinataUpload)
-    console.log("Pinata IPFS URL (imageUploadResult.url):", imageUploadResult.url)
-    console.log("WordPress Media URL (metadata.image):", metadata.image)
     console.log("SELECTED finalImageUrl:", finalImageUrl)
-    console.log("Will use:", usePinataUpload ? "PINATA IPFS" : "WORDPRESS MEDIA")
+    console.log("Storage mode:", usePinataUpload ? "PINATA IPFS" : "WORDPRESS MEDIA")
     console.log("====================================")
 
     let collectionNumber = null
@@ -505,6 +513,7 @@ export default async function handler(req, res) {
     const productUrl =
       metadata.product_url || metadata.external_url || `https://x1xo.com/product/${metadata.product_slug || "nft"}`
     const royaltyPercentage = Number(metadata.royalty_percentage) || 0
+    const collectionName = metadata.collection_name || ""
 
     if (metadata.collection_number) {
       collectionNumber = Number.parseInt(metadata.collection_number) || null
@@ -515,18 +524,27 @@ export default async function handler(req, res) {
     console.log(`🏷️ FINAL nftName: "${nftName}"`)
     console.log(`💰 FINAL royaltyPercentage: ${royaltyPercentage}%`)
     console.log(`🔗 FINAL productUrl: ${productUrl}`)
+    console.log(`🗂️ FINAL collectionName: "${collectionName}"`)
 
     const finalMetadata = {
       name: nftName,
       description: nftDescription,
       image: finalImageUrl,
-      external_url: productUrl, // keep for backwards compatibility
+      external_url: productUrl,
       links: {
         external_url: productUrl,
         website: productUrl,
       },
       seller_fee_basis_points: Math.round((royaltyPercentage || 0) * 100),
       attributes: [
+        ...(collectionName
+          ? [
+              {
+                trait_type: "Collection",
+                value: collectionName,
+              },
+            ]
+          : []),
         ...(collectionNumber
           ? [
               {
@@ -569,7 +587,16 @@ export default async function handler(req, res) {
       },
     }
 
-    console.log("📋 Final metadata:", JSON.stringify(finalMetadata, null, 2))
+    console.log("📋 === FINAL METADATA DEBUG ===")
+    console.log("Name:", finalMetadata.name)
+    console.log("Description:", finalMetadata.description)
+    console.log("Image URL:", finalMetadata.image)
+    console.log("External URL:", finalMetadata.external_url)
+    console.log("Collection Name:", collectionName || "None")
+    console.log("Collection Number:", collectionNumber || "None")
+    console.log("Royalty %:", royaltyPercentage)
+    console.log("Full metadata:", JSON.stringify(finalMetadata, null, 2))
+    console.log("================================")
 
     // Step 2: Upload metadata to Pinata
     console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
@@ -578,7 +605,7 @@ export default async function handler(req, res) {
     if (!uploadResult.success) {
       return res.status(500).json({
         success: false,
-        error: "Failed to upload metadata: " + uploadResult.error,
+        error: "Failed to upload metadata to Pinata: " + uploadResult.error,
       })
     }
 
