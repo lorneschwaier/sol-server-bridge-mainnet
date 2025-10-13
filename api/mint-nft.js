@@ -178,7 +178,7 @@ async function uploadImageToPinata(imageUrl) {
       }
     }
 
-    const imageIpfsUrl = `https://ipfs.io/ipfs/${pinataResponse.data.IpfsHash}` // Using ipfs.io gateway instead of gateway.pinata.cloud to avoid rate limits
+    const imageIpfsUrl = `https://gateway.pinata.cloud/ipfs/${pinataResponse.data.IpfsHash}`
     console.log("✅ Image uploaded to IPFS:", imageIpfsUrl)
 
     return {
@@ -223,7 +223,7 @@ async function uploadToPinata(metadata) {
       },
     )
 
-    const metadataUrl = `https://ipfs.io/ipfs/${response.data.IpfsHash}` // Using ipfs.io gateway instead of gateway.pinata.cloud to avoid rate limits
+    const metadataUrl = `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`
     console.log("✅ Metadata uploaded to Pinata:", metadataUrl)
 
     return {
@@ -251,7 +251,7 @@ async function mintNFTWithCore(
   creatorUmi,
   makeImmutable = true,
   royaltyPercentage = 0,
-  collectionAddress = null, // Added collection address parameter
+  collectionAddress = null,
 ) {
   try {
     if (!creatorUmi) {
@@ -360,7 +360,7 @@ async function mintNFTWithCore(
     console.log("📝 Transaction signature:", result.signature)
 
     console.log("⏳ Waiting for blockchain indexing (60 seconds)...")
-    await new Promise((resolve) => setTimeout(resolve, 60000)) // Increased to 60 seconds
+    await new Promise((resolve) => setTimeout(resolve, 60000))
 
     console.log("🔄 Verifying asset is properly indexed...")
     try {
@@ -423,7 +423,7 @@ export default async function handler(req, res) {
   try {
     const { walletAddress, metadata, makeImmutable = true, usePinataUpload: rawUsePinataUpload = false } = req.body
 
-    const usePinataUpload = true // HARDCODED TO ALWAYS USE PINATA
+    const usePinataUpload = false
 
     console.log("🔍 === PINATA UPLOAD PARAMETER DEBUG (SERVER) ===")
     console.log("Full request body:", JSON.stringify(req.body, null, 2))
@@ -478,24 +478,13 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 1: Upload WordPress image to IPFS for Phantom wallet compatibility
-    console.log("📸 Step 1: Uploading image to IPFS for wallet compatibility...")
-    const imageUploadResult = await uploadImageToPinata(metadata.image)
-
-    if (!imageUploadResult.success) {
-      return res.status(500).json({
-        success: false,
-        error: "Failed to upload image: " + imageUploadResult.error,
-      })
-    }
-
-    const finalImageUrl = usePinataUpload ? imageUploadResult.url : metadata.image
+    console.log("📸 Step 1: Using WordPress image URL directly (no IPFS upload)...")
+    const finalImageUrl = metadata.image
     console.log("🔍 === IMAGE URL SELECTION DEBUG ===")
     console.log("usePinataUpload flag:", usePinataUpload)
-    console.log("Pinata IPFS URL (imageUploadResult.url):", imageUploadResult.url)
     console.log("WordPress Media URL (metadata.image):", metadata.image)
     console.log("SELECTED finalImageUrl:", finalImageUrl)
-    console.log("Will use:", usePinataUpload ? "PINATA IPFS" : "WORDPRESS MEDIA")
+    console.log("Will use: WORDPRESS MEDIA")
     console.log("====================================")
 
     let collectionNumber = null
@@ -503,6 +492,7 @@ export default async function handler(req, res) {
     const nftDescription = metadata.nft_description || metadata.description || ""
     const nftSymbol = metadata.symbol || "X1"
     const royaltyPercentage = Number(metadata.royalty_percentage) || 0
+    const externalUrl = metadata.external_url || "https://x1xo.com"
 
     if (metadata.collection_number) {
       collectionNumber = Number.parseInt(metadata.collection_number) || null
@@ -513,19 +503,22 @@ export default async function handler(req, res) {
     console.log(`🏷️ FINAL nftName: "${nftName}"`)
     console.log(`💰 FINAL royaltyPercentage: ${royaltyPercentage}%`)
 
-    // Step 2: Upload metadata to Pinata
     console.log("📤 Step 2: Uploading metadata to Pinata IPFS...")
     const uploadResult = await uploadToPinata({
       name: nftName,
       description: nftDescription,
       image: finalImageUrl,
-      external_url: "https://x1xo.com",
+      external_url: externalUrl,
+      links: {
+        external_url: externalUrl,
+        website: externalUrl,
+      },
       seller_fee_basis_points: Math.round((royaltyPercentage || 0) * 100),
       attributes: [
         ...(collectionNumber
           ? [
               {
-                trait_type: "Collection",
+                trait_type: "Collection #",
                 value: collectionNumber.toString(),
               },
             ]
@@ -534,8 +527,16 @@ export default async function handler(req, res) {
           trait_type: "Symbol",
           value: nftSymbol,
         },
-        { trait_type: "Minted", value: new Date().toISOString().split("T")[0] },
-        { trait_type: "Storage", value: "IPFS" },
+        {
+          trait_type: "Platform",
+          value: "WordPress",
+        },
+        {
+          trait_type: "Creator",
+          value: "x1xo",
+        },
+        { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
+        { trait_type: "Storage", value: "WordPress Media" },
       ],
       properties: {
         files: [
@@ -569,7 +570,6 @@ export default async function handler(req, res) {
       })
     }
 
-    // Step 3: Mint NFT with Metaplex Core
     console.log("⚡ Step 3: Minting NFT with Core...")
     const mintResult = await mintNFTWithCore(
       walletAddress,
@@ -579,7 +579,7 @@ export default async function handler(req, res) {
       creatorUmi,
       false,
       royaltyPercentage,
-      metadata.collection_address || null, // Pass collection address from metadata
+      metadata.collection_address || null,
     )
 
     if (!mintResult.success) {
@@ -604,7 +604,7 @@ export default async function handler(req, res) {
       isImmutable: mintResult.isImmutable,
       collectionNumber: collectionNumber,
       royaltyPercentage: royaltyPercentage,
-      storageType: usePinataUpload ? "ipfs" : "wordpress",
+      storageType: "wordpress",
       message: "NFT minted successfully! Check Phantom wallet in 15-30 minutes.",
     })
   } catch (error) {
