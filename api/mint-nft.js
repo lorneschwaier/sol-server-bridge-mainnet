@@ -327,13 +327,24 @@ async function mintNFTWithCore(
     // For now, we'll add collection info to metadata attributes only
     if (collectionAddress) {
       console.log("🗂️ Collection address provided:", collectionAddress)
-      console.log("✅ Adding collection to NFT creation")
+      console.log("🔍 Validating collection address format...")
+
+      // Validate that it's a valid Solana address (base58, 32-44 chars)
+      if (collectionAddress.length < 32 || collectionAddress.length > 44) {
+        console.log("⚠️ WARNING: Collection address length is unusual:", collectionAddress.length)
+        console.log("⚠️ Expected 32-44 characters for a valid Solana address")
+      }
+
+      console.log("✅ Adding collection plugin to NFT")
+      console.log("📍 Collection will be set to:", collectionAddress)
 
       // Add collection plugin
       plugins.push({
         type: "Collection",
         collection: publicKey(collectionAddress),
       })
+    } else {
+      console.log("ℹ️ No collection address provided - creating standalone NFT")
     }
 
     const createInstruction = create(creatorUmi, {
@@ -552,7 +563,6 @@ export default async function handler(req, res) {
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
-        { trait_type: "Storage", value: usePinataUpload ? "IPFS (Pinata)" : "WordPress Media" },
       ],
       properties: {
         files: [
@@ -638,4 +648,3 @@ export default async function handler(req, res) {
     })
   }
 }
-
