@@ -323,8 +323,7 @@ async function mintNFTWithCore(
       console.log("⚠️ Skipping royalties plugin (0% royalty)")
     }
 
-    // Collections in Metaplex Core need to be verified separately
-    // For now, we'll add collection info to metadata attributes only
+    // Collections in Metaplex Core are set via the collection parameter in create(), not as a plugin
     if (collectionAddress) {
       console.log("🗂️ Collection address provided:", collectionAddress)
       console.log("🔍 Validating collection address format...")
@@ -335,14 +334,8 @@ async function mintNFTWithCore(
         console.log("⚠️ Expected 32-44 characters for a valid Solana address")
       }
 
-      console.log("✅ Adding collection plugin to NFT")
-      console.log("📍 Collection will be set to:", collectionAddress)
-
-      // Add collection plugin
-      plugins.push({
-        type: "Collection",
-        collection: publicKey(collectionAddress),
-      })
+      console.log("✅ Collection will be linked to NFT")
+      console.log("📍 Collection address:", collectionAddress)
     } else {
       console.log("ℹ️ No collection address provided - creating standalone NFT")
     }
@@ -353,6 +346,12 @@ async function mintNFTWithCore(
       uri: metadataUrl,
       owner: publicKey(walletAddress),
       ...(plugins.length > 0 && { plugins }),
+      ...(collectionAddress && {
+        collection: {
+          key: publicKey(collectionAddress),
+          verified: false,
+        },
+      }),
     })
 
     console.log("📡 Submitting transaction to Solana...")
