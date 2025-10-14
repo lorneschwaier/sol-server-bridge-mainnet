@@ -562,6 +562,10 @@ export default async function handler(req, res) {
         { trait_type: "Platform", value: "WordPress" },
         { trait_type: "Creator", value: "x1xo" },
         { trait_type: "Minted Date", value: new Date().toISOString().split("T")[0] },
+        {
+          trait_type: "Storage",
+          value: usePinataUpload ? "IPFS (Pinata)" : "WordPress Media",
+        },
       ],
       properties: {
         files: [
