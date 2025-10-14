@@ -251,7 +251,7 @@ async function mintNFTWithCore(
   creatorUmi,
   makeImmutable = true,
   royaltyPercentage = 0,
-  collectionAddress = null, // Added collection address parameter
+  collectionAddress = null,
 ) {
   try {
     if (!creatorUmi) {
@@ -327,8 +327,13 @@ async function mintNFTWithCore(
     // For now, we'll add collection info to metadata attributes only
     if (collectionAddress) {
       console.log("🗂️ Collection address provided:", collectionAddress)
-      console.log("⚠️ Note: Collection verification requires separate transaction")
-      console.log("📋 Collection info will be added to metadata attributes")
+      console.log("✅ Adding collection to NFT creation")
+
+      // Add collection plugin
+      plugins.push({
+        type: "Collection",
+        collection: publicKey(collectionAddress),
+      })
     }
 
     const createInstruction = create(creatorUmi, {
@@ -633,3 +638,4 @@ export default async function handler(req, res) {
     })
   }
 }
+
